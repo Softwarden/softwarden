@@ -349,10 +349,9 @@ def test_a_gated_capability_is_refused_in_community_with_a_problem_naming_it(cap
     assert body["title"] == "Capability required"  # one title per problem type (core/problems.py)
 
 
-@pytest.mark.parametrize("capability", sorted(COVERAGE))
+# Without the optional ee package no edition has sso.saml or scim (test_ee_absent.py proves they stay refused).
+@pytest.mark.parametrize("capability", sorted(set(COVERAGE) - EE_ABSENT))
 def test_a_gated_capability_passes_the_gate_in_an_edition_that_has_it(capability, a, api, test_urls):
-    if capability in EE_ABSENT:
-        pytest.skip("needs the optional ee package (SAML and SCIM), which isn't installed")
     set_edition(a["org"], edition_with(capability))
     response = call(api, a, capability)
     assert response.status_code != 403, response.json_body
