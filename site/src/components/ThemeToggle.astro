@@ -1,0 +1,109 @@
+---
+/** System / Light / Dark. Hidden without JavaScript (the page then follows the system). */
+interface Props {
+  id: string;
+}
+const { id } = Astro.props;
+const options = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+---
+<div class="theme-toggle" role="group" aria-labelledby={`${id}-label`}>
+  <span id={`${id}-label`} class="visually-hidden">Theme</span>
+  {
+    options.map((o) => (
+      <button type="button" data-theme-set={o.value} aria-pressed="false" title={`${o.label} theme`}>
+        {o.value === 'system' && (
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.5" />
+            <path d="M5.5 13.75h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        )}
+        {o.value === 'light' && (
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.5" />
+            <path
+              d="M8 1.5v1.25M8 13.25v1.25M1.5 8h1.25M13.25 8h1.25M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+        )}
+        {o.value === 'dark' && (
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M13.5 9.6A5.75 5.75 0 0 1 6.4 2.5a5.75 5.75 0 1 0 7.1 7.1Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+          </svg>
+        )}
+        <span class="visually-hidden">{o.label}</span>
+      </button>
+    ))
+  }
+</div>
+
+<script>
+  const root = document.documentElement;
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function apply(pref: string) {
+    const dark = pref === 'dark' || (pref === 'system' && media.matches);
+    root.setAttribute('data-theme-pref', pref);
+    root.setAttribute('data-theme', dark ? 'dark' : 'light');
+    document.querySelectorAll<HTMLButtonElement>('[data-theme-set]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.themeSet === pref));
+    });
+    window.dispatchEvent(new CustomEvent('softwarden:theme'));
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-theme-set]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const pref = b.dataset.themeSet ?? 'system';
+      try {
+        if (pref === 'system') localStorage.removeItem('softwarden.theme');
+        else localStorage.setItem('softwarden.theme', pref);
+      } catch {
+        /* storage blocked: the choice lasts for this page */
+      }
+      apply(pref);
+    });
+  });
+  media.addEventListener('change', () => apply(root.getAttribute('data-theme-pref') ?? 'system'));
+  apply(root.getAttribute('data-theme-pref') ?? 'system');
+</script>
+
+<style>
+  .theme-toggle {
+    display: none;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--card);
+  }
+  :global(.js) .theme-toggle {
+    display: inline-flex;
+  }
+  button {
+    display: inline-grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+  }
+  button:hover {
+    color: var(--foreground);
+    background: var(--row-hover);
+  }
+  button[aria-pressed='true'] {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+</style>

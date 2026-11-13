@@ -1,0 +1,50 @@
+{
+  "kind": "admin#reports#activities",
+  "etag": "\"SYNTHETIC-ETAG\"",
+  "items": [
+    {
+      "kind": "admin#reports#activity",
+      "etag": "\"SYNTHETIC-ETAG-1\"",
+      "id": {
+        "time": "2026-11-01T09:30:00.000Z",
+        "uniqueQualifier": "-1000000000000000001",
+        "applicationName": "token",
+        "customerId": "C00000000"
+      },
+      "actor": {
+        "callerType": "USER",
+        "email": "user@example.com",
+        "profileId": "100000000000000000001"
+      },
+      "ipAddress": "192.0.2.5",
+      "events": [
+        {
+          "type": "auth",
+          "name": "authorize",
+          "parameters": [
+            {
+              "name": "client_id",
+              "value": "000000000000-synthetic.apps.googleusercontent.com"
+            },
+            {
+              "name": "app_name",
+              "value": "Synthetic Notes App"
+            },
+            {
+              "name": "client_type",
+              "value": "WEB"
+            },
+            {
+              "name": "scope",
+              "multiValue": [
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/gmail.readonly"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nextPageToken": "SYNTHETIC-PAGE-TOKEN"
+}

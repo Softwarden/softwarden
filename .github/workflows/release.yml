@@ -1,0 +1,302 @@
+# Release. Pushing a v* tag (v1.0.0) publishes two images to GitHub Container Registry, under the
+# account or organization that owns the repository, lowercased (Softwarden/softwarden publishes to ghcr.io/softwarden;
+# docs/INSTALL.md and the Helm values name them the same way):
+#   ghcr.io/softwarden/softwarden       the web/API/worker image (the repository's Dockerfile)
+#   ghcr.io/softwarden/softwarden-mcp   the MCP server (mcp/Dockerfile)
+# and creates the GitHub Release with that version's section of CHANGELOG.md and the image digests as its body.
+#
+# Nothing gets a tag until everything has passed, in this order:
+#   1. preflight  the tag is a strict vX.Y.Z[-pre]; the tagged commit is on main; apps/api/pyproject.toml and
+#                 Chart.yaml's appVersion say the same version; CHANGELOG.md has the section with a real date; neither
+#                 image has this version in the registry and there is no GitHub Release for it (a re-run never
+#                 replaces a published version). All in ops/ci/release-preflight.sh.
+#   2. ci         the whole of ci.yml on the tagged commit (it is a reusable workflow).
+#   3. approve    waits on the `release` environment and its required reviewer.
+#   4. images     builds each image without the GitHub Actions cache and pushes it by digest only (no tag), with an
+#                 SBOM and a signed provenance attestation.
+#   5. smoke      starts both digests as the Compose stack and waits for every healthcheck and /readyz.
+#   6. publish    re-checks the version is still unpublished, then copies each digest to its tags (X.Y.Z; X.Y while it
+#                 is the highest stable release of that line; latest only for the highest stable release; a
+#                 pre-release such as v1.1.0-rc.1 gets only its own tag) and creates the GitHub Release.
+# A failure anywhere before publish leaves only untagged digests in the registry: no version tag, no latest. Pushing
+# the tag is a maintainer's step (docs/DEVELOPMENT.md, "Cutting a release").
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# Nothing by default; each job asks for what it needs.
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Preflight (tag, main, versions, unpublished)
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read  # see whether the version is already in ghcr.io
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false, fetch-depth: 0 }  # origin/main, to check the tagged commit is on it
+      - id: version
+        run: bash ops/ci/release-preflight.sh version "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+      - name: The tagged commit is on main, and the versions agree
+        env: { VERSION: "${{ steps.version.outputs.version }}" }
+        run: bash ops/ci/release-preflight.sh repo "$VERSION" "$GITHUB_SHA" origin/main
+      # The section's heading must carry the release date, not the placeholder "unreleased (set on tag day)" a release
+      # keeps until its tag day (CHANGELOG.md; docs/DEVELOPMENT.md, "Cutting a release" step 1).
+      - name: The CHANGELOG heading has the release date
+        env: { VERSION: "${{ steps.version.outputs.version }}" }
+        run: bash ops/ci/release-preflight.sh changelog-date "$VERSION" CHANGELOG.md
+      - run: bash ops/ci/changelog-section.sh "${{ steps.version.outputs.version }}" CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: This version isn't published yet
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          bash ops/ci/release-preflight.sh unpublished \
+            "ghcr.io/$owner/softwarden:$VERSION" "ghcr.io/$owner/softwarden-mcp:$VERSION"
+          if out=$(gh release view "$GITHUB_REF_NAME" 2>&1); then
+            echo "::error::the GitHub Release $GITHUB_REF_NAME already exists"; exit 1
+          elif ! printf '%s' "$out" | grep -qi "release not found"; then
+            echo "::error::can't tell whether the GitHub Release $GITHUB_REF_NAME exists: $out"; exit 1
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with: { name: release-notes, path: "${{ runner.temp }}/notes.md", retention-days: 7 }
+
+  # The full CI (ci.yml) on the tagged commit: a release is never built from a commit whose tests weren't run.
+  ci:
+    name: CI
+    needs: preflight
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  # The `release` environment's required reviewer approves here, after CI and before anything is pushed.
+  approve:
+    name: Approve the release
+    timeout-minutes: 5
+    needs: [preflight, ci]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions: {}
+    steps:
+      - run: echo "Releasing ${{ needs.preflight.outputs.version }} from $GITHUB_SHA"
+
+  images:
+    name: Push ${{ matrix.image }} by digest
+    timeout-minutes: 60
+    needs: [preflight, approve]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write      # push to ghcr.io
+      id-token: write      # sign the attestations (Sigstore)
+      attestations: write  # store them
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: softwarden
+            context: .
+            file: Dockerfile
+            build-contexts: ""
+          - image: softwarden-mcp
+            context: mcp
+            file: mcp/Dockerfile
+            build-contexts: cacerts=ca-certs  # as in ci.yml and compose.yaml (ca-certs/README.md)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
+      # GHCR names are lowercase; the owner's login may not be.
+      - id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Labels and annotations only: the tags are added by the publish job, once everything has passed.
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051  # v5.10.0
+        with:
+          images: ${{ steps.name.outputs.image }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image }}
+            org.opencontainers.image.version=${{ needs.preflight.outputs.version }}
+      # By digest only, and without the GitHub Actions cache: a release is built from the tagged commit alone.
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          build-contexts: ${{ matrix.build-contexts }}
+          platforms: linux/amd64
+          outputs: type=image,name=${{ steps.name.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          sbom: true
+          provenance: mode=max
+          no-cache: true
+      # A signed build provenance attestation in the registry and on the repository's Attestations page; verify with
+      # `gh attestation verify oci://ghcr.io/softwarden/softwarden:1.0.0 --owner Softwarden`. If it fails, the job
+      # fails and nothing is tagged.
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2.4.0
+        with:
+          subject-name: ${{ steps.name.outputs.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Record the digest
+        env: { DIGEST: "${{ steps.build.outputs.digest }}" }
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no digest from the build: $DIGEST"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/digest"
+          printf '%s\n' "$DIGEST" > "$RUNNER_TEMP/digest/${{ matrix.image }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with: { name: "digest-${{ matrix.image }}", path: "${{ runner.temp }}/digest/${{ matrix.image }}", retention-days: 7 }
+
+  # Both pushed digests as the Compose stack, as an installation runs them (docs/INSTALL.md step 4a): the app migrates
+  # and serves, the worker beats, the MCP server answers its healthcheck.
+  smoke:
+    name: Smoke-test the digests
+    needs: images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with: { pattern: "digest-*", path: "${{ runner.temp }}/digest", merge-multiple: true }
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The two Softwarden digests are pulled here; db and proxy (pinned by digest in compose.yaml) are pulled by
+      # `up --pull missing`. --no-build: nothing is built from the checkout.
+      - name: Start the stack from the digests
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          app="ghcr.io/$owner/softwarden@$(cat "$RUNNER_TEMP/digest/softwarden")"
+          mcp="ghcr.io/$owner/softwarden-mcp@$(cat "$RUNNER_TEMP/digest/softwarden-mcp")"
+          docker pull "$app"
+          docker pull "$mcp"
+          {
+            echo "SOFTWARDEN_IMAGE=$app"
+            echo "SOFTWARDEN_MCP_IMAGE=$mcp"
+            echo "SOFTWARDEN_MCP_UPSTREAM=mcp:8001"
+          } >> "$GITHUB_ENV"
+          SOFTWARDEN_IMAGE="$app" SOFTWARDEN_MCP_IMAGE="$mcp" SOFTWARDEN_MCP_UPSTREAM=mcp:8001 \
+            docker compose --profile mcp up -d --no-build --pull missing --wait --wait-timeout 600
+      - name: The stack answers
+        run: |
+          docker compose --profile mcp ps
+          curl -fsS --retry 20 --retry-delay 3 --retry-all-errors -k https://localhost/readyz
+          echo
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors -k https://localhost/ | grep -q '<div id="root">'
+          docker compose exec -T app python manage.py doctor --json > "$RUNNER_TEMP/doctor.json" || true
+          jq -e '.status != "fail"' "$RUNNER_TEMP/doctor.json" > /dev/null
+      - if: failure()
+        run: docker compose --profile mcp ps && docker compose --profile mcp logs --no-color --tail 200
+      - if: always()
+        run: docker compose --profile mcp down --volumes --remove-orphans
+
+  publish:
+    name: Tag the images and create the GitHub Release
+    timeout-minutes: 15
+    needs: [preflight, images, smoke]
+    runs-on: ubuntu-24.04
+    # One publish at a time across all tags, so two releases can't both decide they are the highest and move latest
+    # in the wrong order.
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write  # the GitHub Release
+      packages: write  # the tags
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false, fetch-depth: 0 }  # every v* tag, to work out X.Y and latest
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with: { pattern: "digest-*", path: "${{ runner.temp }}/digest", merge-multiple: true }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with: { name: release-notes, path: "${{ runner.temp }}/notes" }
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag the digests
+        env: { VERSION: "${{ needs.preflight.outputs.version }}", GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          mapfile -t tags < <(git tag --list 'v*' | bash ops/ci/release-preflight.sh tags "$VERSION")
+          if [ "${#tags[@]}" -eq 0 ] || [ "${tags[0]}" != "$VERSION" ]; then
+            echo "::error::couldn't work out the tags for $VERSION"; exit 1
+          fi
+          echo "Tags: ${tags[*]}"
+          latest=false
+          for tag in "${tags[@]}"; do if [ "$tag" = latest ]; then latest=true; fi; done
+          echo "LATEST=$latest" >> "$GITHUB_ENV"  # the GitHub Release is marked Latest only with the latest tag
+          # Again, just before tagging: another run may have published this version since the preflight.
+          bash ops/ci/release-preflight.sh unpublished \
+            "ghcr.io/$owner/softwarden:$VERSION" "ghcr.io/$owner/softwarden-mcp:$VERSION"
+          # One source: a carbon copy, so each tag points at the attested digest itself. X.Y.Z on both images first,
+          # then the moving tags (X.Y, latest) on both, so a failure part-way never moves latest on one image only
+          # (docs/DEVELOPMENT.md, "Cutting a release": a failure in Publish).
+          for image in softwarden softwarden-mcp; do
+            digest=$(cat "$RUNNER_TEMP/digest/$image")
+            docker buildx imagetools create --tag "ghcr.io/$owner/$image:$VERSION" "ghcr.io/$owner/$image@$digest"
+            test "$(docker buildx imagetools inspect "ghcr.io/$owner/$image:$VERSION" --format '{{json .Manifest.Digest}}' | tr -d '"')" = "$digest"
+          done
+          for image in softwarden softwarden-mcp; do
+            digest=$(cat "$RUNNER_TEMP/digest/$image")
+            args=()
+            for tag in "${tags[@]:1}"; do args+=(--tag "ghcr.io/$owner/$image:$tag"); done
+            if [ "${#args[@]}" -gt 0 ]; then
+              docker buildx imagetools create "${args[@]}" "ghcr.io/$owner/$image@$digest"
+            fi
+          done
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          PRERELEASE: ${{ needs.preflight.outputs.prerelease }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          {
+            cat "$RUNNER_TEMP/notes/notes.md"
+            printf '\n## Images\n\n'
+            for image in softwarden softwarden-mcp; do
+              printf -- "- \`ghcr.io/%s/%s:%s\`\n  digest \`%s\`\n" "$owner" "$image" "$VERSION" "$(cat "$RUNNER_TEMP/digest/$image")"
+            done
+            verify="gh attestation verify oci://ghcr.io/$owner/softwarden:$VERSION --owner $GITHUB_REPOSITORY_OWNER"
+            printf '\nPin the digest or the version tag, never latest. Check the provenance with %s.\n' "\`$verify\`"
+            printf '\nUpgrade with the upgrade runbook (docs/04-development/upgrade-runbook.md): back up, pin SOFTWARDEN_IMAGE to the new tag, pre-check, start.\n'
+          } > "$RUNNER_TEMP/body.md"
+          flags=("--latest=$LATEST")
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Softwarden $VERSION" \
+            --notes-file "$RUNNER_TEMP/body.md" "${flags[@]}"

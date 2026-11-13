@@ -1,0 +1,51 @@
+**/node_modules
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+# The image ships no tests, test-only URLconfs (tests/capability_urls.py) or e2e servers.
+apps/api/tests
+apps/api/e2e_server.py
+apps/api/e2e_db.py
+# The Playwright-only views. core/simulation.e2e() needs api/e2e_views.py, so without it no environment variable
+# makes the image the Playwright server.
+apps/api/api/e2e_views.py
+apps/web/dist
+apps/web/test-results
+apps/web/playwright-report
+.git
+**/.claude
+.agents
+.codex
+# The website (its own build; site/README.md).
+site
+docs
+# Bundled into the SPA by the permissions reference and the API guide (Dockerfile web stage).
+!docs/PERMISSIONS.md
+!docs/API.md
+tools
+mcp
+# One machine's local state, which `COPY apps/api/ ./` in the Dockerfile would otherwise build into the image and hand
+# to everyone who pulls it: attachment files and organization exports a local run wrote under
+# media/, the first-run setup token, environment files, logs, backups, certificates and review notes. Everything
+# .gitignore ignores under apps/api must be matched here too (tests/test_dockerignore.py checks).
+apps/api/media
+apps/api/.bootstrap
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/*.pyc
+**/*.tsbuildinfo
+**/backups
+**/dist
+**/test-results
+**/playwright-report
+**/review-scratch
+**/*_REVIEW_*.md
+**/*_PROMPT_*.md
+**/.impeccable
+**/.agents
+**/.codex
+certs

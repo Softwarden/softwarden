@@ -1,0 +1,18 @@
+{
+  "_comment": "Advisories CI's npm audit accepts (ops/ci/npm-audit-check.py). Each needs a reason it doesn't apply here and a review_by date; past that date the audit fails until someone looks again. Remove an entry once a fix ships.",
+  "level": "moderate",
+  "allow": [
+    {
+      "advisory": "GHSA-wrjc-x8rr-h8h6",
+      "package": "react-router",
+      "reason": "Open redirect via a backslash in <Link> and useNavigate. Fixed only in 7.18 (no 6.x release); the SPA is on 6.30. The one navigation target a user controls is ?next= on the sign-in page, and login.tsx localPath() refuses anything that isn't a same-origin path or contains a backslash or control character. Upgrade to v7 is the fix.",
+      "review_by": "2027-02-11"
+    },
+    {
+      "advisory": "GHSA-337j-9hxr-rhxg",
+      "package": "react-router",
+      "reason": "Constructor injection through deserializeErrors() during server-side rendering hydration. The SPA renders only in the browser with <BrowserRouter> (main.tsx): no SSR, no data router, no hydrationData, so the code path never runs. Upgrade to v7 is the fix.",
+      "review_by": "2027-02-11"
+    }
+  ]
+}

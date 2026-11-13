@@ -1,0 +1,5 @@
+{
+  "_status": "HTTP/1.1 200 OK",
+  "Link": "<https://example.service-now.com/api/now/table/cmdb_ci?sysparm_offset=40&sysparm_limit=1000>;rel=\"next\"",
+  "X-Total-Count": "<total records returned by the query>"
+}

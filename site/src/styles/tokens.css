@@ -1,0 +1,187 @@
+/*
+ * Site tokens, taken from the app's apps/web/src/design/tokens.json (semantic layer, light and dark values).
+ * Same names as the app where the meaning is the same. Never write a colour outside this file.
+ */
+:root {
+  color-scheme: light;
+  --background: #f5f6f8; /* ink-50 */
+  --foreground: #141a24; /* ink-925 */
+  --text-strong: #0b1018; /* ink-990 */
+  --card: #ffffff;
+  --popover: #ffffff;
+  --primary: #2457c5; /* blue-600 */
+  --primary-foreground: #ffffff;
+  --primary-hover: #1c4aae; /* blue-700 */
+  --link: #2457c5;
+  --accent-line: #2457c5;
+  --secondary: #eef0f3; /* ink-100 */
+  --muted: #eef0f3;
+  --muted-foreground: #535e6e; /* ink-500 */
+  --accent: #ebf0fb; /* blue-50 */
+  --accent-foreground: #1c4aae;
+  --border: #dee2e8; /* ink-150 */
+  --border-subtle: #eceff2; /* ink-125 */
+  --border-strong: #c3cad4; /* ink-200 */
+  --input: #858e9c; /* ink-350 */
+  --ring: #2457c5;
+  --table-head: #f8f9fb; /* ink-25 */
+  --row-hover: #f1f3f6; /* ink-75 */
+  --row-selected: #e4ecfb; /* blue-75 */
+
+  --ink: #141a24; /* sidebar: ink in both themes; used for the terminal */
+  --ink-border: #232b38;
+  --ink-foreground: #d5dbe4;
+  --ink-muted: #98a2b3;
+  --ink-ring: #7aa2f7; /* sidebar-ring: focus on ink surfaces */
+
+  --state-overdue: #a1232f;
+  --state-overdue-foreground: #ffffff;
+  --state-pending: #fff3d1;
+  --state-pending-foreground: #663f00;
+  --state-pending-border: #b98210;
+  --state-unreviewed: #ffffff;
+  --state-unreviewed-foreground: #363f4d;
+  --state-unreviewed-border: #858e9c;
+  --state-confirmed: #e6f3e9;
+  --state-confirmed-foreground: #1a6230;
+  --state-confirmed-border: #3f8a57;
+  --gap: #fff7ef;
+  --gap-foreground: #833700;
+  --gap-border: #c8661b;
+
+  --criticality-critical: #a1232f;
+  --criticality-high: #9a4a00;
+
+  --kind-application: #ebf0fb;
+  --kind-application-foreground: #1c4aae;
+  --kind-component: #e3f3f0;
+  --kind-component-foreground: #0f6b5c;
+  --kind-integration: #f1ecfa;
+  --kind-integration-foreground: #6b3fa0;
+  --kind-agent: #f8ecf5;
+  --kind-agent-foreground: #8a3b7d;
+
+  --chart-2: #c8661b; /* orange: "closes a loop" lines */
+  --graph-line: #6b7687; /* ink-400: dependency lines, 4.5:1 on card */
+
+  --font-sans: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+  --radius: 0.5rem;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --background: #0f1318; /* ink-950 */
+    --foreground: #e5e8ed;
+    --text-strong: #f5f7fa;
+    --card: #171c23; /* ink-900 */
+    --popover: #1e242d; /* ink-825 */
+    --primary: #2457c5;
+    --primary-foreground: #ffffff;
+    --primary-hover: #1c4aae;
+    --link: #8fb2f8; /* blue-300 */
+    --accent-line: #8fb2f8;
+    --secondary: #222934;
+    --muted: #1e242d;
+    --muted-foreground: #a2acba; /* ink-275 */
+    --accent: #1c2842; /* blue-925 */
+    --accent-foreground: #a4c0fa;
+    --border: #2d3540; /* ink-650 */
+    --border-subtle: #232a35;
+    --border-strong: #6b7687; /* ink-400 */
+    --input: #6b7687;
+    --ring: #86aaff;
+    --table-head: #1c222b;
+    --row-hover: #1a2029;
+    --row-selected: #16233a;
+    --ink: #141a24;
+    --ink-border: #2d3540;
+    --state-overdue: #a1232f;
+    --state-overdue-foreground: #ffffff;
+    --state-pending: #352708;
+    --state-pending-foreground: #f3c86c;
+    --state-pending-border: #b38420;
+    --state-unreviewed: #171c23;
+    --state-unreviewed-foreground: #c5ccd6;
+    --state-unreviewed-border: #6b7687;
+    --state-confirmed: #11301b;
+    --state-confirmed-foreground: #8fdba4;
+    --state-confirmed-border: #3f9a5b;
+    --gap: #2a1d10;
+    --gap-foreground: #f4a866;
+    --gap-border: #c87428;
+    --criticality-critical: #ff8a92;
+    --criticality-high: #f2a35b;
+    --kind-application: #1a2740;
+    --kind-application-foreground: #a4c0fa;
+    --kind-component: #0f2a26;
+    --kind-component-foreground: #7fd9c6;
+    --kind-integration: #2a2140;
+    --kind-integration-foreground: #c9b3f2;
+    --kind-agent: #331a2e;
+    --kind-agent-foreground: #f0a8df;
+    --chart-2: #f2a35b;
+    --graph-line: #858e9c;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: #0f1318;
+  --foreground: #e5e8ed;
+  --text-strong: #f5f7fa;
+  --card: #171c23;
+  --popover: #1e242d;
+  --primary: #2457c5;
+  --primary-foreground: #ffffff;
+  --primary-hover: #1c4aae;
+  --link: #8fb2f8;
+  --accent-line: #8fb2f8;
+  --secondary: #222934;
+  --muted: #1e242d;
+  --muted-foreground: #a2acba;
+  --accent: #1c2842;
+  --accent-foreground: #a4c0fa;
+  --border: #2d3540;
+  --border-subtle: #232a35;
+  --border-strong: #6b7687;
+  --input: #6b7687;
+  --ring: #86aaff;
+  --table-head: #1c222b;
+  --row-hover: #1a2029;
+  --row-selected: #16233a;
+  --ink: #141a24;
+  --ink-border: #2d3540;
+  --state-overdue: #a1232f;
+  --state-overdue-foreground: #ffffff;
+  --state-pending: #352708;
+  --state-pending-foreground: #f3c86c;
+  --state-pending-border: #b38420;
+  --state-unreviewed: #171c23;
+  --state-unreviewed-foreground: #c5ccd6;
+  --state-unreviewed-border: #6b7687;
+  --state-confirmed: #11301b;
+  --state-confirmed-foreground: #8fdba4;
+  --state-confirmed-border: #3f9a5b;
+  --gap: #2a1d10;
+  --gap-foreground: #f4a866;
+  --gap-border: #c87428;
+  --criticality-critical: #ff8a92;
+  --criticality-high: #f2a35b;
+  --kind-application: #1a2740;
+  --kind-application-foreground: #a4c0fa;
+  --kind-component: #0f2a26;
+  --kind-component-foreground: #7fd9c6;
+  --kind-integration: #2a2140;
+  --kind-integration-foreground: #c9b3f2;
+  --kind-agent: #331a2e;
+  --kind-agent-foreground: #f0a8df;
+  --chart-2: #f2a35b;
+  --graph-line: #858e9c;
+}

@@ -1,0 +1,98 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#servicePrincipals",
+  "value": [
+    {
+      "id": "00000000-0000-0000-0000-000000000501",
+      "appId": "00000000-0000-0000-0000-000000000201",
+      "displayName": "Contoso Web",
+      "accountEnabled": true,
+      "servicePrincipalType": "Application",
+      "signInAudience": "AzureADMyOrg",
+      "appOwnerOrganizationId": "00000000-0000-0000-0000-0000000000a0",
+      "homepage": "https://app1.example.com/",
+      "publisherName": "Example Publisher",
+      "description": null,
+      "notes": null,
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "appRoleAssignmentRequired": false,
+      "replyUrls": [
+        "https://app1.example.com/signin"
+      ],
+      "servicePrincipalNames": [
+        "00000000-0000-0000-0000-000000000201"
+      ],
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "owners": []
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000502",
+      "appId": "00000000-0000-0000-0000-000000000202",
+      "displayName": "Slack",
+      "accountEnabled": true,
+      "servicePrincipalType": "Application",
+      "signInAudience": "AzureADMyOrg",
+      "appOwnerOrganizationId": "00000000-0000-0000-0000-000000009001",
+      "homepage": "https://app2.example.com/",
+      "publisherName": "Example Publisher",
+      "description": null,
+      "notes": null,
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "appRoleAssignmentRequired": false,
+      "replyUrls": [
+        "https://app2.example.com/signin"
+      ],
+      "servicePrincipalNames": [
+        "00000000-0000-0000-0000-000000000202"
+      ],
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "owners": []
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000503",
+      "appId": "00000000-0000-0000-0000-000000000203",
+      "displayName": "Managed identity sample",
+      "accountEnabled": true,
+      "servicePrincipalType": "ManagedIdentity",
+      "signInAudience": "AzureADMyOrg",
+      "appOwnerOrganizationId": "00000000-0000-0000-0000-0000000000a0",
+      "homepage": "https://app3.example.com/",
+      "publisherName": "Example Publisher",
+      "description": null,
+      "notes": null,
+      "tags": [
+        "WindowsAzureActiveDirectoryIntegratedApp"
+      ],
+      "appRoleAssignmentRequired": false,
+      "replyUrls": [
+        "https://app3.example.com/signin"
+      ],
+      "servicePrincipalNames": [
+        "00000000-0000-0000-0000-000000000203"
+      ],
+      "keyCredentials": [],
+      "passwordCredentials": [],
+      "verifiedPublisher": {
+        "displayName": null,
+        "verifiedPublisherId": null,
+        "addedDateTime": null
+      },
+      "owners": []
+    }
+  ]
+}

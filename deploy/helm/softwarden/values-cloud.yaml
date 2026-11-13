@@ -1,0 +1,117 @@
+# The hosted (cloud) service: the same image behind a managed PostgreSQL 17 over TLS, the app and the worker scaled
+# apart, every secret from a Secret you create first. docs/CLOUD.md is the guide; every value here is a placeholder to
+# replace (names, hosts, sizes), never a secret.
+# NOT SUPPORTED FOR PRODUCTION IN 1.0: evaluate cloud mode with test data only, and keep /platform and
+# /api/v1/platform/ behind your own access proxy or VPN (docs/CLOUD.md, "Not supported for production in 1.0").
+#   helm upgrade --install softwarden deploy/helm/softwarden -n softwarden -f deploy/helm/softwarden/values-cloud.yaml
+deployment: cloud   # SOFTWARDEN_DEPLOYMENT=cloud: signup on, private service hosts off, setup creates platform staff
+
+image:
+  repository: ghcr.io/softwarden/softwarden
+  tag: "1.0.0"   # pin the release; upgrade by changing it (docs/CLOUD.md, Upgrades)
+
+publicHostname: app.softwarden.example   # placeholder: the service's public name
+
+# Narrow to your ingress controller's pod CIDR.
+trustedProxies: "10.0.0.0/8"
+
+database:
+  host: softwarden-pg.postgres.example   # placeholder: the managed server's host name
+  port: 5432
+  name: softwarden
+  user: softwarden
+  existingSecret: softwarden-database      # key `password`; create it first (docs/CLOUD.md, Secrets)
+  existingSecretPasswordKey: password
+  password: ""                             # never set in cloud: the chart refuses to render with no existingSecret
+  sslmode: verify-full                     # require at least; verify-full checks the server's name against its CA
+  sslrootcert: /etc/softwarden/pg/root.crt # the CA bundle, mounted below
+  connMaxAge: ""                           # cloud default: 60 s
+  jit: "off"                               # a pooler must be in session mode (docs/CLOUD.md, Connection poolers)
+
+secrets:
+  existingSecret: softwarden-keys          # django_secret_key, credential_keys, backup_key, ops_token (docs/CLOUD.md)
+
+smtp:
+  host: smtp.mail.example                  # placeholder: your SMTP relay or provider's SMTP endpoint
+  port: 587
+  user: softwarden
+  tls: true
+  from: "Softwarden <no-reply@softwarden.example>"
+  existingSecret: softwarden-smtp          # key `smtp-password`
+  existingSecretPasswordKey: smtp-password
+
+extraEnv: []
+#  - name: SOFTWARDEN_ORG_DELETION_GRACE_DAYS
+#    value: "30"
+#  - name: SOFTWARDEN_TENANT_BACKUP_RETENTION
+#    value: "7"
+
+extraVolumes:
+  - name: pg-root
+    secret: { secretName: softwarden-pg-root-ca }   # the managed server's CA bundle, key root.crt
+extraVolumeMounts:
+  - { name: pg-root, mountPath: /etc/softwarden/pg, readOnly: true }
+
+app:
+  replicas: 2
+  gunicornWorkers: 3
+  gunicornThreads: 8   # each thread keeps a connection (60 s): docs/CLOUD.md, Database connections
+  resources:
+    requests: { cpu: 500m, memory: 768Mi }
+    limits: { memory: 1536Mi }
+  autoscaling:
+    enabled: false   # optional: needs the metrics server
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      # No labelSelector: the chart fills in this release's own app labels (name, instance, component).
+
+worker:
+  replicas: 2
+  longJobs: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 1536Mi }
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      # No labelSelector: the chart fills in this release's own worker labels.
+
+podDisruptionBudget:
+  enabled: true
+  app:
+    minAvailable: 1
+  worker:
+    minAvailable: 1
+
+persistence:
+  # Attachment files and tenant backups/exports (MEDIA_ROOT): shared by every app and worker pod, so ReadWriteMany
+  # (Azure Files, Amazon EFS, Filestore, NFS). Object storage isn't supported.
+  media:
+    size: 100Gi
+    accessMode: ReadWriteMany
+    storageClass: ""   # placeholder: an RWX storage class
+    existingClaim: ""
+  # The installation's nightly encrypted backup sets, written by whichever worker takes the schedule.
+  backups:
+    enabled: true
+    size: 200Gi
+    accessMode: ReadWriteMany
+    storageClass: ""   # placeholder: an RWX storage class
+    existingClaim: ""
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 26m
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "on"   # README, "Request buffering"
+    cert-manager.io/cluster-issuer: letsencrypt   # placeholder: your issuer
+  tls:
+    enabled: true
+    secretName: softwarden-tls

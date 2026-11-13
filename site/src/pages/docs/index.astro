@@ -1,0 +1,155 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import DocsNav from '../../components/DocsNav.astro';
+import { DOCS, DOC_GROUPS, docUrl } from '../../lib/docs-manifest';
+
+const entries = await getCollection('docs');
+const titleOf = (slug: string) =>
+  entries.find((e) => e.id === slug)?.body?.match(/^#\s+(.+?)\s*$/m)?.[1] ??
+  DOCS.find((d) => d.slug === slug)!.nav;
+
+const intro: Record<string, string> = {
+  'Get started': 'From a fresh VM to a signed-in Admin, then discovery from Microsoft Entra ID.',
+  Reference: 'Settings, permissions and the interfaces other tools use.',
+  Operations: 'Keeping an installation backed up, upgraded and healthy.',
+};
+---
+<Base
+  title="Documentation"
+  description="Install, configure and run Softwarden: the install guide, first run, settings, Microsoft permissions, the API and the operations runbooks."
+  current="docs"
+>
+  <div class="docs-index wrap">
+    <aside class="side" aria-label="Documentation">
+      <div class="sticky"><DocsNav label="Documentation" /></div>
+    </aside>
+    <div class="body">
+      <header class="head">
+        <h1>Documentation</h1>
+        <p class="lede">
+          These pages are the docs that ship in the repository, published as they are. Start with the install guide: it
+          takes a fresh Ubuntu VM to a signed-in Admin with backups running.
+        </p>
+        <div class="cta-row">
+          <a class="btn" href="/docs/install/">Install guide</a>
+          <a class="btn btn-outline" href="/docs/first-run/">First run</a>
+        </div>
+      </header>
+
+      {
+        DOC_GROUPS.map((g) => (
+          <section class="group" aria-labelledby={`g-${g.replace(/\s+/g, '-').toLowerCase()}`}>
+            <div class="group-head">
+              <h2 id={`g-${g.replace(/\s+/g, '-').toLowerCase()}`}>{g}</h2>
+              <p class="muted">{intro[g]}</p>
+            </div>
+            <ul class="cards">
+              {DOCS.filter((d) => d.group === g).map((d) => (
+                <li>
+                  <a href={docUrl(d)}>
+                    <span class="t">{titleOf(d.slug)}</span>
+                    <span class="d">{d.description}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      }
+    </div>
+  </div>
+</Base>
+
+<style>
+  .docs-index {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 48px;
+    align-items: start;
+    padding-block: 32px 96px;
+  }
+  .sticky {
+    position: sticky;
+    top: 88px;
+    margin-left: -10px;
+  }
+  .head {
+    display: grid;
+    gap: 16px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  .head h1 {
+    font-size: clamp(32px, 4vw, 44px);
+    letter-spacing: -0.028em;
+    line-height: 1.1;
+  }
+  .group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr);
+    gap: 16px 40px;
+    padding-block: 36px;
+    border-bottom: 1px solid var(--border);
+  }
+  .group-head {
+    display: grid;
+    gap: 6px;
+    align-content: start;
+  }
+  .group-head h2 {
+    font-size: 20px;
+  }
+  .group-head p {
+    font-size: 15px;
+  }
+  .cards {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .cards a {
+    display: grid;
+    gap: 4px;
+    height: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    text-decoration: none;
+    transition: border-color var(--duration-fast) var(--ease);
+  }
+  .cards a:hover {
+    border-color: var(--accent-line);
+  }
+  .t {
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+  .d {
+    color: var(--muted-foreground);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  @media (max-width: 1100px) {
+    .group {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 860px) {
+    .docs-index {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .side {
+      display: none;
+    }
+  }
+  @media (max-width: 600px) {
+    .cards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

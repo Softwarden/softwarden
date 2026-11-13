@@ -1,0 +1,110 @@
+{{- /* The worker: schedules, queued jobs and the nightly backup (compose.yaml `worker`), scaled apart from the app. One
+replica is enough; more are safe (a schedule fire is taken by one conditional UPDATE and jobs are claimed with FOR UPDATE
+SKIP LOCKED under a lease, core/jobs.py; tests/test_jobs.py runs workers side by side) but need ReadWriteMany media and
+backup storage (softwarden.validate refuses otherwise). */ -}}
+{{- $rwo := or (eq .Values.persistence.media.accessMode "ReadWriteOnce") (and .Values.persistence.backups.enabled (eq .Values.persistence.backups.accessMode "ReadWriteOnce")) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "softwarden.fullname" . }}-worker
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  {{- if $rwo }}
+  strategy: { type: Recreate }
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "softwarden.selector" (dict "root" . "component" "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "softwarden.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      {{- with .Values.worker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false  # never calls the Kubernetes API
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      # On SIGTERM the worker stops claiming and finishes the job in hand (a tick spends at most 50 s on jobs).
+      terminationGracePeriodSeconds: 90
+      initContainers:
+        {{- include "softwarden.secretsInit" . | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "softwarden.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "manage.py", "run_worker"]
+          env:
+            {{- include "softwarden.env" . | nindent 12 }}
+            - name: SOFTWARDEN_WORKER_LONG_JOBS
+              value: {{ .Values.worker.longJobs | quote }}
+          # This pod's own liveness, from a file in its /tmp (core/worker.py): the main loop touches it at each tick and
+          # the heartbeat thread every 30 s after a database beat, while the main loop is between ticks or on one step
+          # (a schedule run, a job) for at most 65 minutes (a schedule's 1-hour ceiling plus one lease). The probe fails
+          # once the file is 180 s old, so a loop busy past that bound is restarted about 70 minutes into the step. The
+          # database heartbeat (`run_worker --check`, /readyz) is one row every replica refreshes and can't single out
+          # a stuck pod.
+          livenessProbe:
+            exec: { command: ["python", "manage.py", "run_worker", "--check", "--local"] }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - { name: secrets, mountPath: /data/secrets, readOnly: true }
+            {{- include "softwarden.commonMounts" . | nindent 12 }}
+            - { name: media, mountPath: /data/media }
+            {{- if .Values.persistence.backups.enabled }}
+            - { name: backups, mountPath: /data/backups }
+            {{- end }}
+      volumes:
+        {{- include "softwarden.secretVolumes" . | nindent 8 }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ include "softwarden.mediaClaim" . }}
+        {{- if .Values.persistence.backups.enabled }}
+        - name: backups
+          persistentVolumeClaim:
+            claimName: {{ include "softwarden.backupsClaim" . }}
+        {{- end }}
+      {{- if $rwo }}
+      # A ReadWriteOnce volume can be mounted on one node only: run beside the app.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "softwarden.selector" (dict "root" . "component" "app") | nindent 18 }}
+      {{- else }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
+      {{- with .Values.worker.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- include "softwarden.spread" (dict "root" $ "component" "worker" "constraints" .) | trim | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: softwarden
+description: >-
+  Softwarden, the open-source system of record for an IT team's software, SaaS, integrations and AI agents. The web/API
+  and the background worker from one image, behind your cluster's ingress, on an external PostgreSQL 17.
+type: application
+# The chart's own version; bump it with any change to the chart.
+version: 1.0.0
+# The release the chart deploys by default (image.tag overrides it). Set with each release, as docs/DEVELOPMENT.md
+# ("Cutting a release") says; apps/api/tests/test_upgrade_ci.py checks it matches the newest CHANGELOG release.
+appVersion: "1.0.0"
+kubeVersion: ">=1.25.0-0"
+keywords:
+  - itam
+  - saas-management
+  - software-catalog

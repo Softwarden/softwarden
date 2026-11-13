@@ -1,0 +1,84 @@
+@import "tailwindcss";
+/* Inter Variable (SIL OFL 1.1), bundled by Vite from @fontsource-variable/inter: no network call at runtime. */
+@import "@fontsource-variable/inter/wght.css";
+/* Every colour, motion and type token, light and dark, generated from src/design/tokens.json. */
+@import "./design/tokens.css";
+
+/* Light and dark themes. <html data-theme> is set before first paint by index.html from the
+   user's preference (System, Light or Dark; src/lib/theme.ts), so `dark:` follows it rather than the OS setting. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 2px);
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground text-sm antialiased font-sans; font-feature-settings: var(--font-features); }
+  a { @apply text-link underline-offset-2; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-ring; }
+  .tabular, td time { font-variant-numeric: tabular-nums; }
+  body { line-height: 1.5; }
+  h1, h2, h3, h4 { text-wrap: balance; }
+  p, dd, li { text-wrap: pretty; }
+  code, kbd, pre, samp { font-feature-settings: normal; }
+  input[type="checkbox"] { @apply h-4 w-4 shrink-0 accent-primary; }
+  /* A fieldset is at least as wide as its widest line by default, which widened forms past a 320 px screen. */
+  fieldset { min-inline-size: 0; }
+}
+
+/* Motion settles quickly and is removed entirely for people who ask for less. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+/* In the base layer so utilities such as text-primary-foreground still win (unlayered rules beat every layer). */
+@layer base { :where(button, input) { font: inherit; color: inherit; } }
+
+@layer components {
+  /* Native select styled like shadcn inputs (kept native for keyboard and screen-reader behavior). */
+  .native-select { @apply h-9 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm shadow-xs focus-visible:outline-2 focus-visible:outline-ring; }
+  /* An upload's progress (attachments): a native <progress> (announced by screen readers) in token colours. */
+  .sw-progress { appearance: none; @apply overflow-hidden rounded-full border border-border-strong bg-muted; }
+  .sw-progress::-webkit-progress-bar { @apply bg-muted; }
+  .sw-progress::-webkit-progress-value { @apply bg-primary; }
+  .sw-progress::-moz-progress-bar { @apply bg-primary; }
+}
+
+/* Dialogs fade and rise 8 px as they open. Opening only: a closing animation would hold the dialog (and the
+   return of focus) until it ends. --duration-base is 0 under reduced motion (tokens.css). */
+@keyframes sw-fade-in { from { opacity: 0; } }
+@keyframes sw-rise-in { from { opacity: 0; transform: translateY(8px); } }
+.sw-dialog-overlay[data-state="open"] { animation: sw-fade-in var(--duration-base) var(--ease); }
+.sw-dialog[data-state="open"] { animation: sw-rise-in var(--duration-base) var(--ease); }
+
+/* Windows High Contrast and other forced-colour modes: chips keep a visible border and their glyph, since the
+   system palette replaces every fill. */
+@media (forced-colors: active) {
+  .sw-chip { border: 1px solid CanvasText; forced-color-adjust: none; background: Canvas; color: CanvasText; }
+  .sw-chip svg, .sw-glyph { forced-color-adjust: auto; }
+  .sw-chip[data-gap] { border-style: dashed; }
+}
+
+/* Touch-sized targets on phones: the 32 px small button and 24 px chips are for pointer devices only. */
+@media (max-width: 639px) and (pointer: coarse) {
+  :where(button, [role="button"], [role="tab"], [role="menuitem"], select, input:not([type="checkbox"], [type="radio"]), .native-select) { min-height: 44px; }
+  :where(input[type="checkbox"], input[type="radio"]) { min-width: 24px; min-height: 24px; }
+  /* Small buttons (links styled as buttons too), icon buttons such as a filter chip's remove, and the table's density
+     and page-size controls. */
+  :where([data-slot="button"], .sw-target) { min-height: 44px; }
+  :where(.sw-target, [data-slot="button"][data-size^="icon"]) { min-width: 44px; }
+}
+
+/* Queue tables stack below 640 px using each cell's data-label (QueueTable).
+   Unlayered on purpose so it overrides the table cells' padding utilities. */
+@media (max-width: 639px) {
+  .queue-table thead { @apply sr-only; }
+  .queue-table, .queue-table tbody, .queue-table tr, .queue-table th, .queue-table td { display: block; }
+  .queue-table tr { @apply h-auto border-b border-border-subtle px-4 py-3; }
+  .queue-table th, .queue-table td { @apply h-auto border-0 p-0 py-0.5 whitespace-normal; }
+  .queue-table td[data-label]::before { content: attr(data-label); @apply mr-2 text-xs font-semibold text-muted-foreground; }
+  .queue-table td.next-step { @apply pt-2 text-left; }
+}

@@ -1,0 +1,85 @@
+{{- /* The MCP server (compose profile `mcp`, docs/MCP.md): it calls the app inside the cluster under the public host
+name, and holds no token or secret; every MCP client sends its own API token. */ -}}
+{{- if .Values.mcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "softwarden.fullname" . }}-mcp
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "softwarden.selector" (dict "root" . "component" "mcp") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "softwarden.labels" . | nindent 8 }}
+        app.kubernetes.io/component: mcp
+    spec:
+      automountServiceAccountToken: false  # never calls the Kubernetes API
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 10002
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: mcp
+          image: {{ printf "%s:%s" .Values.mcp.image.repository (.Values.mcp.image.tag | default .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SOFTWARDEN_URL
+              value: {{ printf "http://%s-app:%v" (include "softwarden.fullname" .) .Values.service.port | quote }}
+            - name: SOFTWARDEN_HOST_HEADER
+              value: {{ .Values.publicHostname | quote }}
+            - name: MCP_HOST
+              value: "0.0.0.0"
+            - name: MCP_PORT
+              value: "8001"
+            - name: MCP_ALLOWED_HOSTS
+              value: {{ printf "%s,%s:*" .Values.publicHostname .Values.publicHostname | quote }}
+            - name: MCP_ALLOWED_ORIGINS
+              value: {{ printf "https://%s,https://%s:*" .Values.publicHostname .Values.publicHostname | quote }}
+            - name: MCP_ENABLE_WRITES
+              value: {{ ternary "1" "0" .Values.mcp.enableWrites | quote }}
+            # Who may set X-Forwarded-For (the ingress controller): the client's address is then the rightmost one
+            # not in this list, and the limit on refused tokens counts per client, not per ingress pod.
+            - name: MCP_FORWARDED_ALLOW_IPS
+              value: {{ .Values.trustedProxies | quote }}
+          ports:
+            - { name: http, containerPort: 8001 }
+          # /healthz answers without a token or an allowed Host.
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.mcp.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "softwarden.fullname" . }}-mcp
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  selector:
+    {{- include "softwarden.selector" (dict "root" . "component" "mcp") | nindent 4 }}
+  ports:
+    - { name: http, port: 8001, targetPort: http }
+{{- end }}

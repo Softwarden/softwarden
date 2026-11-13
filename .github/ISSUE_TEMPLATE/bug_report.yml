@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in Softwarden doesn't work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A security problem goes to SECURITY.md instead, never to an issue.
+        Leave out secrets, tokens, tenant ids, host names and personal data; synthetic values are fine.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The image tag you run, or the version /healthz/ops reports.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it is installed
+      options:
+        - Docker Compose (docs/INSTALL.md)
+        - Helm chart
+        - From source (docs/DEVELOPMENT.md)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did
+      description: The steps, from a clean start if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Error messages, the request id shown with the error, and log lines (docker compose logs app).
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: manage.py doctor
+      description: The output of `docker compose exec app python manage.py doctor`, if it is an installation problem.
+      render: text

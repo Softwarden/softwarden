@@ -1,0 +1,22 @@
+{
+  "id": "10002",
+  "key": "ED-1",
+  "self": "https://example.atlassian.net/rest/api/3/issue/10002",
+  "fields": {
+    "summary": "Synthetic ticket title",
+    "status": {
+      "self": "https://example.atlassian.net/rest/api/3/status/10000",
+      "description": "",
+      "iconUrl": "https://example.atlassian.net/",
+      "name": "In Progress",
+      "id": "10000",
+      "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+      }
+    }
+  }
+}

@@ -1,0 +1,224 @@
+# Softwarden Helm chart (secondary install; Docker Compose is the primary one: docs/INSTALL.md).
+# Every environment variable the app reads is in docs/ENV.md; set any of them with `extraEnv`.
+
+image:
+  # The release image published to GHCR on each tag (.github/workflows/release.yml, docs/INSTALL.md). The tag
+  # defaults to the chart's appVersion; pin it.
+  repository: ghcr.io/softwarden/softwarden
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# The installation mode (SOFTWARDEN_DEPLOYMENT, docs/CLOUD.md): selfhosted (one team's server) or cloud (the hosted,
+# multi-organization service: signup on, private service hosts off, connections kept, first-run setup creates platform
+# staff). cloud also makes the chart refuse values a hosted installation mustn't run with: generated keys, a password in
+# values, a database without TLS, no SMTP. values-cloud.yaml is the starting point.
+deployment: selfhosted
+
+# The address people open. The app's allowed host, CSRF origin and base URL follow it (docs/ENV.md, PUBLIC_HOSTNAME).
+publicHostname: softwarden.example.com
+
+# Who may set X-Forwarded-For / X-Forwarded-Proto / X-Request-ID: your ingress controller's pods. Private ranges by
+# default, which only peers inside the cluster can come from (SOFTWARDEN_TRUSTED_PROXIES). Narrow it to the controller's
+# pod CIDR where you can.
+trustedProxies: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+# ---- PostgreSQL 17 (external; the chart bundles none) -----------------------------------------------------------------
+database:
+  host: softwarden-postgresql
+  port: 5432
+  name: softwarden
+  user: softwarden
+  # The password: from an existing Secret (recommended; create it before installing, README) ...
+  existingSecret: softwarden-database
+  existingSecretPasswordKey: password
+  # ... or, with existingSecret set to "", given here and stored in the chart's own Secret at first install (avoid in
+  # production: it stays in the release's values).
+  password: ""
+  # libpq sslmode (POSTGRES_SSLMODE): disable, allow, prefer, require, verify-ca, verify-full. Empty: libpq's default
+  # (prefer, which falls back to an unencrypted connection). Use require or stronger for a managed server; cloud needs it.
+  sslmode: ""
+  # The server's CA bundle, a path inside the containers (POSTGRES_SSLROOTCERT), for verify-ca and verify-full. Mount it
+  # with extraVolumes / extraVolumeMounts.
+  sslrootcert: ""
+  # Seconds a connection is kept for reuse (SOFTWARDEN_DB_CONN_MAX_AGE). Empty: 60 (0 only under SOFTWARDEN_DEBUG).
+  # A pooler between the pods and PostgreSQL must run in SESSION mode, for app and worker alike: transaction pooling
+  # leaks the session advisory locks (the backup lock, the Graph mail slots; docs/CLOUD.md, Connection poolers).
+  connMaxAge: ""
+  # "on" behind a pooler that refuses the `options` startup parameter (PgBouncer, Azure's built-in pooler); then run
+  # `ALTER ROLE <user> SET jit = off;` once on the server (SOFTWARDEN_DB_JIT, docs/ENV.md).
+  jit: "off"
+
+# ---- secrets ----------------------------------------------------------------------------------------------------------
+# The files the Compose init service would generate. Keys: django_secret_key, credential_keys (one Fernet key per line,
+# newest first), backup_key and, optionally, ops_token (the /healthz/ops bearer token).
+secrets:
+  # Recommended: create the Secret yourself (README) and name it here. Back up credential_keys and backup_key off the
+  # cluster: without them stored secrets and backups can't be read.
+  existingSecret: ""
+  # Without existingSecret the chart generates the four values once, at first install (a pre-install hook kept on
+  # uninstall: helm.sh/resource-policy keep). Read them back with kubectl and store them off the cluster (README).
+
+# ---- email (the installation default; organizations can use their own settings) -------------------------------------
+smtp:
+  host: ""
+  port: 587
+  user: ""
+  tls: true
+  from: "Softwarden <softwarden@example.com>"
+  # The password from an existing Secret (key below); never put it in values.
+  existingSecret: ""
+  existingSecretPasswordKey: smtp-password
+
+# Any other setting from docs/ENV.md, for app, worker and the migration job alike. Values may use valueFrom.
+extraEnv: []
+#  - name: SOFTWARDEN_ATTACHMENT_MAX_MB
+#    value: "50"
+#  - name: SOFTWARDEN_MAX_REQUEST_MB
+#    value: "51"
+#  Preview features (off in 1.0.0; docs/CAPABILITIES.md): Okta and Google Workspace discovery, ServiceNow and Halo
+#  ticket connections. Off unless set; their data is kept either way.
+#  - name: SOFTWARDEN_PREVIEW_FEATURES
+#    value: "1"
+
+# ---- workloads --------------------------------------------------------------------------------------------------------
+app:
+  # More than one replica needs ReadWriteMany media storage, and first-run setup with `bootstrap_admin --create`
+  # (README): the one-time setup token is per pod.
+  # Ignored while autoscaling is on.
+  replicas: 1
+  gunicornWorkers: 3
+  # Threads per gunicorn worker (SOFTWARDEN_THREADS). Each thread can keep a database connection, so a pod may hold
+  # gunicornWorkers x gunicornThreads of them (docs/CLOUD.md, Database connections).
+  gunicornThreads: 8
+  # A HorizontalPodAutoscaler for the app on CPU (needs the metrics server and ReadWriteMany media). Each pod keeps
+  # up to gunicornWorkers x gunicornThreads database connections (an idle thread keeps its own), so at maxReplicas
+  # the app holds maxReplicas x workers x threads (6 x 3 x 8 = 144 by default): keep max_connections above that.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 1Gi }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Entries without a labelSelector get this release's app selector labels.
+  topologySpreadConstraints: []
+  podAnnotations: {}
+
+worker:
+  # Workers scale apart from the app. More than one is safe (each schedule fire and job runs once) and needs
+  # ReadWriteMany media and backup storage. Each pod's liveness probe reads its own heartbeat (run_worker --check --local):
+  # a main loop busy on one schedule run or job for more than about 65 minutes is restarted (docs/CLOUD.md, Scaling).
+  replicas: 1
+  longJobs: 2
+  resources:
+    requests: { cpu: 100m, memory: 384Mi }
+    limits: { memory: 1Gi }
+  nodeSelector: {}
+  tolerations: []
+  # Used when neither volume is ReadWriteOnce; with one, the worker is pinned beside the app instead.
+  affinity: {}
+  topologySpreadConstraints: []
+  podAnnotations: {}
+
+# PodDisruptionBudgets for app and worker (a node drain keeps this many running). Use with 2 or more replicas: with one,
+# minAvailable 1 blocks every voluntary eviction.
+podDisruptionBudget:
+  enabled: false
+  app:
+    minAvailable: 1
+  worker:
+    minAvailable: 1
+
+# The migration job runs before every install and upgrade (helm hook); the app never migrates on its own.
+migrations:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
+
+# The MCP server (docs/MCP.md), off by default. It holds no token: each client sends its own.
+mcp:
+  enabled: false
+  image:
+    repository: ghcr.io/softwarden/softwarden-mcp
+    tag: ""
+  enableWrites: false
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+podSecurityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  runAsNonRoot: true
+  fsGroup: 10001
+  seccompProfile: { type: RuntimeDefault }
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true   # every container gets a writable emptyDir at /tmp (uploads, the backup's scratch)
+  capabilities: { drop: [ALL] }
+
+# Size of the /tmp emptyDir each pod gets (multipart uploads are staged there; keep it above SOFTWARDEN_MAX_REQUEST_MB).
+tmpSizeLimit: 256Mi
+
+# Extra volumes and mounts for app, worker and the migration job alike, for example a CA bundle for an external
+# PostgreSQL that requires TLS (database.sslmode verify-full, with PGSSLROOTCERT in extraEnv pointing at the mount).
+extraVolumes: []
+#  - name: pg-root
+#    secret: { secretName: postgres-root-ca }
+extraVolumeMounts: []
+#  - { name: pg-root, mountPath: /etc/softwarden/pg, readOnly: true }
+
+# The init container that copies the keys into /data/secrets.
+secretsInit:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 64Mi }
+
+# ---- storage ----------------------------------------------------------------------------------------------------------
+persistence:
+  # Attachment files, shared by app and worker. With ReadWriteOnce the worker is scheduled on the app's node.
+  media:
+    size: 10Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+  # The worker's nightly encrypted backup sets. Copy them off the cluster too (backup runbook).
+  backups:
+    enabled: true
+    size: 20Gi
+    accessMode: ReadWriteOnce
+    storageClass: ""
+    existingClaim: ""
+
+# ---- network ----------------------------------------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: true
+  className: ""
+  # TLS terminates at the ingress controller. Caddy isn't used; the app sends its own security headers (X-Frame-Options,
+  # the CSP, Permissions-Policy; README, "Security headers"), and HSTS for hstsSeconds while tls.enabled is on
+  # (SOFTWARDEN_HSTS_SECONDS; 0 turns it off). Don't add a CSP on the ingress: the app's pages that set their own
+  # (attachment downloads) would then carry two, and the stricter one wins.
+  hstsSeconds: 31536000
+  # ingress-nginx refuses bodies over 1 MB by default, which breaks attachment uploads: allow the app's own limit
+  # (SOFTWARDEN_MAX_REQUEST_MB, 26 MiB). The ingress must also read each request body in full before passing it on
+  # (ingress-nginx's default, stated so a cluster-wide setting can't turn it off): gunicorn's threads are few, and a
+  # handful of clients sending bodies one byte at a time would otherwise hold them all (README, "Request buffering").
+  # Other controllers ignore these; set their equivalent.
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 26m
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "on"
+  #  cert-manager.io/cluster-issuer: letsencrypt
+  tls:
+    enabled: true
+    secretName: softwarden-tls

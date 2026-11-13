@@ -1,0 +1,60 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Page not found" description="This address doesn't match a page on softwarden.dev." noindex>
+  <section class="wrap nf" aria-labelledby="nf-title">
+    <svg class="links" width="120" height="120" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M4.5 8.5 10.5 23.5 16 11.5 21.5 23.5 27.5 8.5" stroke="var(--accent-line)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+      <circle cx="4.5" cy="8.5" r="3.1" fill="var(--accent-line)"></circle>
+      <circle cx="10.5" cy="23.5" r="3.1" fill="var(--accent-line)"></circle>
+      <circle cx="21.5" cy="23.5" r="3.1" fill="var(--accent-line)"></circle>
+      <circle cx="27.5" cy="8.5" r="3.1" fill="var(--accent-line)"></circle>
+      <circle cx="16" cy="11.5" r="3.7" fill="var(--chart-2)"></circle>
+    </svg>
+    <p class="code"><span class="chip gap"><span class="chip-glyph" aria-hidden="true">⚠</span>No page at this address</span></p>
+    <h1 id="nf-title">Page not found</h1>
+    <p class="lede">The link may be old, or the page may have moved when the docs were reorganized. These are the usual places to go next.</p>
+    <ul class="next">
+      <li><a href="/">Home</a><span>What Softwarden is and does</span></li>
+      <li><a href="/docs/install/">Install guide</a><span>From a fresh VM to a signed-in Admin</span></li>
+      <li><a href="/docs/">Documentation</a><span>Every published doc, by topic</span></li>
+      <li><a href="/changelog/">Changelog</a><span>What each release contains</span></li>
+    </ul>
+  </section>
+</Base>
+
+<style>
+  .nf {
+    display: grid;
+    gap: 18px;
+    padding-block: clamp(56px, 10vw, 120px);
+    max-width: 760px;
+  }
+  h1 {
+    font-size: clamp(34px, 4.6vw, 52px);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+  .next {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    border-top: 1px solid var(--border);
+  }
+  .next li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    align-items: baseline;
+    padding-block: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .next a {
+    font-weight: 600;
+    min-width: 150px;
+  }
+  .next span {
+    color: var(--muted-foreground);
+    font-size: 15px;
+  }
+</style>

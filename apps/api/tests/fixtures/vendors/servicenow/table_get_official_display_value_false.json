@@ -1,0 +1,47 @@
+{
+  "result": [
+    {
+      "parent": "",
+      "made_sla": "true",
+      "watch_list": "",
+      "upon_reject": "cancel",
+      "sys_updated_on": "2016-01-19 04:52:04",
+      "approval_history": "",
+      "number": "PRB0000050",
+      "sys_updated_by": "glide.maint",
+      "opened_by": {
+        "link": "https://example.service-now.com/api/now/table/sys_user/glide.maint",
+        "value": "glide.maint"
+      },
+      "user_input": "",
+      "sys_created_on": "2016-01-19 04:51:19",
+      "sys_domain": {
+        "link": "https://example.service-now.com/api/now/table/sys_user_group/global",
+        "value": "global"
+      },
+      "state": "4",
+      "sys_created_by": "glide.maint",
+      "knowledge": "false",
+      "order": "",
+      "closed_at": "2016-01-19 04:52:04",
+      "cmdb_ci": {
+        "link": "https://example.service-now.com/api/now/table/cmdb_ci/00000000000000000000000000000001",
+        "value": "00000000000000000000000000000001"
+      },
+      "impact": "3",
+      "active": "false",
+      "priority": "4",
+      "short_description": "Switch occasionally drops connections",
+      "description": "Switch occasionally drops connections",
+      "close_notes": "updated firmware",
+      "sys_class_name": "problem",
+      "sys_id": "00000000000000000000000000000002",
+      "contact_type": "phone",
+      "urgency": "3",
+      "approval": "not requested",
+      "sys_mod_count": "1",
+      "escalation": "0",
+      "upon_approval": "proceed"
+    }
+  ]
+}

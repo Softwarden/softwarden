@@ -1,0 +1,19 @@
+{{- /* PodDisruptionBudgets: a voluntary eviction (node drain, cluster upgrade) leaves at least minAvailable pods of each
+running. Meant for 2 or more replicas (values-cloud.yaml). */ -}}
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- range $component := list "app" "worker" }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "softwarden.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "softwarden.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  minAvailable: {{ (index $.Values.podDisruptionBudget $component).minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "softwarden.selector" (dict "root" $ "component" $component) | nindent 6 }}
+{{- end }}
+{{- end }}

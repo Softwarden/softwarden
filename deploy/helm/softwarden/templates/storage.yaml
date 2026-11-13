@@ -1,0 +1,38 @@
+{{- /* Attachment files (app and worker) and backup sets (worker). Kept on uninstall: they hold your data. */ -}}
+{{- if not .Values.persistence.media.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "softwarden.mediaClaim" . }}
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [{{ .Values.persistence.media.accessMode }}]
+  {{- with .Values.persistence.media.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.media.size }}
+{{- end }}
+{{- if and .Values.persistence.backups.enabled (not .Values.persistence.backups.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "softwarden.backupsClaim" . }}
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [{{ .Values.persistence.backups.accessMode }}]
+  {{- with .Values.persistence.backups.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.backups.size }}
+{{- end }}

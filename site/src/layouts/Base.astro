@@ -1,0 +1,77 @@
+---
+import '@fontsource-variable/inter/wght.css';
+import '../styles/global.css';
+import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { siteConfig } from '../site.config';
+
+interface Props {
+  /** Page title without the site name; omit on the home page. */
+  title?: string;
+  description: string;
+  /** Section of the nav to mark as current. */
+  current?: 'docs' | 'changelog' | 'home';
+  noindex?: boolean;
+}
+
+const { title, description, current, noindex = false } = Astro.props;
+const fullTitle = title ? `${title} | Softwarden` : 'Softwarden: the open-source catalog of the software your IT team runs';
+const canonical = new URL(Astro.url.pathname, siteConfig.url).href;
+const ogImage = new URL('/og.png', siteConfig.url).href;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script is:inline>
+      // Same rule as the app's theme-init.js: a stored "light" or "dark" wins; anything else follows the system.
+      // Runs before first paint so the page never flashes the wrong theme.
+      (function () {
+        var pref = 'system';
+        try {
+          var s = localStorage.getItem('softwarden.theme');
+          if (s === 'light' || s === 'dark') pref = s;
+        } catch (e) {}
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+        var d = document.documentElement;
+        d.setAttribute('data-theme-pref', pref);
+        d.setAttribute('data-theme', dark ? 'dark' : 'light');
+        d.classList.add('js');
+      })();
+    </script>
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
+    <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1318" media="(prefers-color-scheme: dark)" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Softwarden" />
+    <meta property="og:title" content={title ?? 'Softwarden'} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Softwarden: an application catalog that stays true." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title ?? 'Softwarden'} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <Header current={current} />
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

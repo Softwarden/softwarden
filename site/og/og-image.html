@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- Source of public/og.png (1200 x 630). Regenerate with: node og/make-og.cjs -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: 'Inter Variable'; src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; }
+  * { box-sizing: border-box; }
+  body { margin: 0; width: 1200px; height: 630px; background: #f5f6f8; color: #141a24; font-family: 'Inter Variable', sans-serif; font-feature-settings: 'cv11', 'ss01'; }
+  .frame { display: grid; grid-template-columns: 560px 1fr; gap: 48px; align-items: center; height: 100%; padding: 64px 64px 64px 72px; border-bottom: 10px solid #2457c5; }
+  .brand { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 700; letter-spacing: -0.035em; }
+  h1 { font-size: 66px; line-height: 1.02; letter-spacing: -0.035em; margin: 40px 0 24px; font-weight: 700; color: #0b1018; }
+  p { font-size: 24px; line-height: 1.4; color: #535e6e; margin: 0; }
+  .q { background: #fff; border: 1px solid #dee2e8; border-radius: 10px; overflow: hidden; }
+  .qh { padding: 18px 22px; border-bottom: 1px solid #dee2e8; font-size: 21px; font-weight: 650; }
+  .qh span { display: block; font-size: 15px; font-weight: 400; color: #535e6e; }
+  .row { padding: 16px 22px; border-bottom: 1px solid #eceff2; display: grid; gap: 8px; }
+  .row:last-child { border-bottom: 0; }
+  .n { font-size: 18px; font-weight: 600; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { font-size: 15px; font-weight: 500; padding: 4px 10px; border-radius: 5px; border: 1px solid; }
+  .gap { background: #fff7ef; color: #833700; border: 1px dashed #c8661b; }
+  .over { background: #a1232f; color: #fff; border-color: #a1232f; }
+  .pend { background: #fff3d1; color: #663f00; border-color: #b98210; }
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div>
+      <div class="brand">
+        <svg width="44" height="44" viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="7" fill="#2457C5"/><path d="M22.5 10H12.5a3 3 0 0 0 0 6h7a3 3 0 0 1 0 6H9.5" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        softwarden
+      </div>
+      <h1>An application catalog that stays true.</h1>
+      <p>Open-source, self-hosted system of record for the software, SaaS, integrations and AI agents an IT team runs.</p>
+    </div>
+    <div class="q">
+      <div class="qh">Needs attention <span>Contoso, demo data</span></div>
+      <div class="row"><span class="n">Service Desk Portal</span><span class="chips"><span class="chip gap">⚠ No business owner</span><span class="chip gap">⚠ No technical owner</span></span></div>
+      <div class="row"><span class="n">Zoom Pro renewal</span><span class="chips"><span class="chip over">! Overdue</span></span></div>
+      <div class="row"><span class="n">Workday 2027R1 upgrade</span><span class="chips"><span class="chip pend">↻ Stale snapshot</span></span></div>
+      <div class="row"><span class="n">Invoice Triage Agent</span><span class="chips"><span class="chip gap">⚠ No human-in-loop decision</span></span></div>
+    </div>
+  </div>
+</body>
+</html>

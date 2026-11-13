@@ -1,0 +1,109 @@
+# Changelog
+
+Every release of Softwarden, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
+
+Each release has a section headed `## [X.Y.Z] - YYYY-MM-DD`. Pushing the tag `vX.Y.Z` publishes the images and creates the GitHub Release with that section as its notes (`.github/workflows/release.yml`); a tag without a section publishes nothing. A pre-release tag (`v1.1.0-rc.1`) needs its own section too, headed `## [1.1.0-rc.1] - YYYY-MM-DD`. A release is prepared in one of two ways, and the release workflow refuses to publish a heading without a `YYYY-MM-DD` date. Usually, before tagging, rename `[Unreleased]` to the version and date and start a new empty `[Unreleased]` above it. A release already written under its own heading keeps the placeholder `unreleased (set on tag day)` instead of the date until then (1.0.0 does); replace the placeholder with the tag day. Either way, and set the same version everywhere a version lives ([Cutting a release](docs/DEVELOPMENT.md#cutting-a-release); `apps/api/tests/test_upgrade_ci.py` checks they agree).
+
+## [Unreleased]
+
+## [1.0.0] - unreleased (set on tag day)
+
+The first release of Softwarden: an open-source system of record for the software, SaaS, integrations and AI agents an IT team runs. Install it on one Linux VM with Docker Compose (`docs/INSTALL.md`, then `docs/FIRST_RUN.md` for discovery), or on Kubernetes with the Helm chart. Everything listed here is open source and included for every organization (`docs/CAPABILITIES.md`).
+
+Two kinds of feature are marked. *(API only)* means there are no screens yet: use the REST API. *(preview)* means the feature is hidden unless the installation sets `SOFTWARDEN_PREVIEW_FEATURES=1` (docs/CAPABILITIES.md, "Preview features"). Preview features were built and tested against simulators and the vendors' documentation only, never against a live Okta, Google Workspace, ServiceNow or Halo tenant, so treat them as untested in production. With the setting off, `auth/me` leaves out the `preview`, `discovery.okta` and `discovery.google` capabilities, their routes answer 403, the discovery and ticket schedules skip them and the app doesn't offer them. Stored data is kept and used again once the setting is on.
+
+### Added
+
+#### Catalog and relationships
+- Applications, components (scripts, APIs, services, workflows, automations), integrations and AI agents, each with owners, a support team, an IT steward, lifecycle, environment, hosting, data classification, URLs and the Entra, Azure and Power Platform IDs that tie them to what discovery finds.
+- AI agents with their platform, channels, models and providers, data access scope, human-in-the-loop decision and whether their actions can write; a models-in-use report.
+- People, teams, departments, vendors (with support contacts and an account manager), tags and categories.
+- Custom fields defined by Admins, on records and vendors, with validation, list filters, exports and import.
+- Attachments (files and links) on records, vendors and contracts, with size limits and content checks.
+- Relationships (depends on, implements, replaces, and your own types with inverse labels), integrations as data flows, link confirmations, a dependency explorer and a map per record, cycle-safe, with saved change assessments.
+- Reviews with due dates, Needs attention queues for ownership gaps, overdue reviews, links to verify and AI agent gaps, data-quality rules with exceptions and a completeness score.
+- Global search across records, vendors, people and attachments; a command palette and keyboard shortcuts.
+- Lists with filters kept in the URL, chosen columns, saved views (personal or shared) and CSV and Excel export.
+- CSV import with a template or your own column mapping, a preview with decisions on possible matches, and a commit that saves everything or nothing.
+- Bulk edit of up to 200 records with a preview, and Admin bulk delete that names what blocks it.
+- An audit log of every change with before and after values and diffs, a History tab on each record, and CSV export; JSON lines export for a SIEM.
+- Organizations with Admin, Editor and Viewer roles; one account can belong to several organizations.
+- An optional compliance profile (GxP fields), off by default.
+- A vendor risk file per vendor: security questionnaire, assurance report (SOC 2, ISO 27001), DPA, subprocessors, risk tier and notes. Dated documents read as current, expiring or expired, and each expiry date is a reminder (the built-in "Vendor risk documents" rule: 60, 30 and 7 days before). A high or critical vendor with no current SOC 2 or equivalent, and a vendor processing personal data without a signed DPA, are Needs attention gaps. There is a risk overview and a documents list, each with a CSV.
+- A data-flow map. Integrations record the kinds of data they carry (personal, special-category, financial, credentials, health, customer content, other). The map answers "where does confidential data go?" with filters, a graph and an audited CSV. It flags risky flows: confidential or personal data to a vendor with no DPA, no authentication to an external vendor, and flows classified above the record receiving them. Risky flows are a Needs attention queue, and two data-quality checks ask for an integration's classification and categories.
+- End-of-life tracking via endoflife.date. Map an application, component or instance to a product and release cycle and see each version's status (supported, security fixes only, end of life), its end-of-life date and the days left. There is a calendar with filters and a CSV, and a Needs attention queue. The built-in "End of life" rule reminds 90, 30 and 7 days before, then every 30 days while a version is past its end of life. A daily worker job refreshes the public data (ETag-aware); for air-gapped installs, set `SOFTWARDEN_EOL_ENABLED=0` and use `manage.py eol_import`.
+- Offboarding and access review. A person's page lists everywhere they appear: records, AI agents (including those running as them), integrations, IT stewardship, teams, vendors, contracts, renewals, reviews, assessments, data-quality exceptions, discovery and the Entra owners of discovered apps (and, for Admins, notification rules and their account), with a CSV. Reassign hands chosen roles to an active colleague in one transaction, one audited change per row, never deleting. The access review flags inactive owners, owners whose account was deactivated or removed, records with no owner and Entra owners that differ from the catalog's, with a CSV.
+- Catalog as code (`docs/CATALOG_AS_CODE.md`): the catalog as one YAML file per record for a git repository, in a stable format that diffs well in pull requests. Export it, plan, and apply through the same services, limits and audit log as the app, in Administration or with `manage.py catalog_export` and `catalog_apply`. A stale plan is refused; prune is opt-in. Admin only.
+- Ticket links on change assessments and renewals: paste a Jira, ServiceNow, Halo or other ticket address and the system and key are parsed; the status can be set by hand. With a Jira connection (an account email and API token, encrypted and write-only), the worker reads open tickets' status hourly, and an Admin can allow creating a ticket from an assessment or renewal (off by default; every attempt audited). ServiceNow and Halo ticket connections are *(preview)*; without the preview setting their pasted links still work with a status set by hand.
+
+#### Contracts, licenses and spend
+- Contracts with lines that split the cost across the applications they cover, amounts kept exactly (never rounded through floating point), billing frequency, annualized cost, notice period and the cancellation deadline it implies.
+- Renewals with cycles and history, linked to one contract as their single source of dates, and a Renew action that starts the next term.
+- License pools with seats purchased and assigned, utilization and over-use warnings, and a seat count review; seat counts can follow Entra license data.
+- A dashboard, spend and deadline reports with CSV export, and an ICS calendar feed of renewal deadlines.
+- Contract and license pool imports.
+- License waste *(API only; the screens come in a later release)*, from the discovery source `entra_licence_usage`. It reads each licensed user's licenses (`User.Read.All`) and last successful sign-in (`AuditLog.Read.All` with Entra ID P1). `GET /api/v1/reports/licence-waste` shows, per SKU, assigned, active, new, inactive, never signed in, disabled and unknown licenses, guests and service accounts. It also shows the annual cost of reclaimable and unassigned seats from the contracts of the license pools bound to the SKU, with totals per currency and named gaps where no price is known. It has filters and an audited CSV, and an Admin-only per-SKU drill-down. License pools and contracts get license waste blocks, and the offboarding footprint lists a person's licenses. The inactive threshold is an organization setting (`inactive_seat_days`, default 90). Without P1, licenses are still counted and the last sign-in is unknown. Only a keyed hash of each user's object ID, SKU IDs, flags and dates are stored.
+
+#### Reminders and notifications
+- Reminders for renewals, cancellation deadlines, reviews and date custom fields, with snooze, acknowledge and resolve.
+- Notification rules that decide who hears about what and when, with a preview and a test send; the daily digest is one of them.
+- Delivery by email (Microsoft Graph sendMail or SMTP), Microsoft Teams (Workflows) and webhooks, with a delivery log and resend.
+- Weekly emails of a saved view, and a profile switch to turn them off.
+
+#### Discovery and the assistant
+- Read-only discovery from Microsoft Entra: enterprise applications, app registrations, their owners, expiring secrets and certificates, licenses and agent identities.
+- Read-only discovery from Azure, Power Platform and HaloITSM.
+- Shadow IT from Microsoft Entra ID: the source `entra_shadow_it` reads the sign-in logs (`AuditLog.Read.All`, Entra ID P1 or P2) and OAuth consent grants (`Directory.Read.All`). Third-party apps nobody registered become discovery candidates, with users and sign-ins over 30 days, consent type and high-risk scopes. The Shadow IT page has filters and an audited CSV. Reads are incremental, and only daily counts and a HyperLogLog sketch of hashed user IDs are stored, never sign-in rows or user IDs.
+- SSO and MFA coverage gaps: the source `entra_coverage` reads each linked Entra app's single sign-on mode, SCIM provisioning jobs (`Synchronization.Read.All`) and conditional access policies (`Policy.Read.All`, Entra ID P1). The SSO coverage report has filters and an audited CSV, the application page shows the gaps, and the data-quality rules No SSO, No MFA policy and No SCIM use it. Without P1, MFA is unknown and the rest is still reported. Curated SSO and SCIM fields are never written; differences are shown.
+- Okta applications and Google Workspace third-party apps (from the OAuth token audit log) as discovery sources *(preview)*.
+- Connections with encrypted, write-only secrets, a connection test that names any missing permission, a guided setup per source, live run progress and run history. Every permission requested is listed in `docs/PERMISSIONS.md`.
+- Discovery never overwrites what you curated: findings go to a reconciliation queue as suggestions to link, create or dismiss, with Undo; differences from the source, records no longer seen and items out of scope are shown for you to decide.
+- An assistant that suggests links and new records from discovery findings, using Claude with your own API key and a monthly cost cap, with a usage log.
+
+#### API, webhooks and MCP
+- A REST API at `/api/v1/` for everything the web app does, with an OpenAPI schema and an in-app API reference, RFC 9457 problem details, keyset pagination, ETag and If-Match on edits, and rate limits per token and per user.
+- If-Match is required from a signed-in browser session: a PATCH or DELETE, or an action that takes If-Match, sent without it gets `428 /problems/precondition-required`, and nothing changes. The web app sends the ETag from every edit form, so a second person's save can't silently undo the first one's. API tokens are exempt. A client of your own that writes through a signed-in session must send the ETag from its GET, or `If-Match: *`. `SOFTWARDEN_REQUIRE_IF_MATCH=0` turns the rule off (docs/ENV.md).
+- Composite endpoints for common questions (deadlines, renewals with owners, spend, dependencies, discovery summary, data gaps, expiring credentials).
+- API tokens, read-only or read-write, shown once.
+- Signed webhooks with event subscriptions, retries with backoff, an attempt log, ping, secret rotation and automatic disabling of failing endpoints, written through an outbox in the same transaction as the change.
+- An MCP server (`ghcr.io/softwarden/softwarden-mcp`) that lets an AI assistant read the catalog through the API with your token, with opt-in writes guarded by If-Match; stdio or token-gated HTTP behind Caddy.
+
+#### Identity
+- Local accounts with first-run setup, invitations with copy-once links, a pending-access list for auto-provisioned users, and an operator command to reset a locked-out Admin.
+- Single sign-on with OpenID Connect per organization, with presets for Microsoft Entra ID, Okta and Google and a generic one, set up as a draft, tested, then activated, with a recovery runbook.
+
+#### Self-host operations
+- Docker Compose install behind Caddy with automatic TLS (your certificate, Let's Encrypt or Caddy's local CA) and no settings file needed: secrets are generated on first start.
+- A Helm chart for Kubernetes with an external PostgreSQL 17. With `secrets.existingSecret` it sets `SOFTWARDEN_CREDENTIAL_KEYS_FILE` and `SOFTWARDEN_BACKUP_KEY_FILE` to the Secret's `credential_keys` and `backup_key`, which outrank keys given through `extraEnv`; `database.sslmode` sets `POSTGRES_SSLMODE`, which also reaches the backup's `pg_dump`. The worker's liveness probe is `run_worker --check --local`, the pod's own heartbeat.
+- Export all of an organization's data as a zip, by its Admins, in every edition.
+- Nightly encrypted backups of the database and attachment files from the worker, with retention, a disk-space floor, `backup_now`, `ops/restore.sh --rehearse` and the last good backup's age on the System page.
+- Forward-only migrations, `upgrade_check` with a manifest of what must survive an upgrade, and an upgrade runbook; CI rehearses every upgrade by restoring a backup of the previous release under the new image.
+- `manage.py doctor`, which checks the whole setup without printing secrets.
+- JSON logs with request ids and secret scrubbing, `/readyz` for monitors, `/healthz/ops` for operators (it reports this version), and optional OpenTelemetry traces.
+- Security headers and a Content Security Policy in Caddy, rate limits on sign-in and the API, upload content sniffing, a dependency audit in CI, and `SECURITY.md` with the security model and how to report a vulnerability.
+- Release images for the app and the MCP server on GitHub Container Registry, each with an SBOM and a signed provenance attestation.
+- No outbound connection except to the services you configure: no CDN, telemetry or external fonts.
+
+#### Hosted (cloud) edition
+- A hosted deployment mode (`docs/CLOUD.md`): `SOFTWARDEN_DEPLOYMENT=cloud`, `POSTGRES_SSLMODE` and `POSTGRES_SSLROOTCERT`, `doctor`'s cloud checks, first-run setup that creates platform staff, and the Helm chart's `values-cloud.yaml` with separately scaled workers, PodDisruptionBudgets and an optional HPA.
+- Public signup with email verification, off by default (`SOFTWARDEN_SIGNUP_ENABLED`), which creates a cloud organization and its Admin; invitations by email.
+- An Admin of a cloud organization can delete it after an export and a grace period (30 days by default, cancelable until then).
+- Per-organization limits (records, connectors, members, attachment storage, API rate), generous by default for a hosted service and unlimited otherwise, and on a hosted service a nightly backup of each organization's data that its Admins can download.
+- A platform console for whoever runs the service: every organization with its usage, edition changes, suspension, per-organization capability overrides and limits, and impersonating a member, with re-authentication, a reason, a time limit and a banner. Every platform action is audited.
+
+### Security
+- **Simulated tenants and hosts are refused outside development:** the Microsoft tenant `simulated` and the `*.simulated.invalid` hosts (Halo, Okta, Google, Jira, ServiceNow, Graph email) work only with `SOFTWARDEN_DEBUG` on, in the Playwright server, or with the new `SOFTWARDEN_ALLOW_SIMULATED=1`. Otherwise they are refused on save, at the connection test and when a run, ticket refresh or email starts; existing ones are kept but don't run, and `doctor` warns. `seed_demo` refuses without the flag, so the Docker demo sets it in `.env` (README); the dev stack sets it. The sign-in simulators are unchanged (DEBUG or Playwright only).
+
+### Upgrade notes
+- **Generic OpenID Connect sign-in needs the token endpoint on the discovery host.** The generic OIDC preset now refuses a discovery document whose `token_endpoint` isn't on the discovery URL's own scheme, host and port. The client secret is sent there, and this keeps a document served from another path of a shared host from sending it elsewhere. Sign-in then fails with `discovery_invalid`, and the message names both hosts. Known to be affected: **Amazon Cognito** (discovery on `cognito-idp.<region>.amazonaws.com`, token endpoint on `<domain>.auth.<region>.amazoncognito.com`): its split token host isn't supported by the generic OIDC preset in this release. The Entra, Okta and Google presets are not affected (docs/PERMISSIONS.md).
+
+### Known limitations
+- License waste has no screens yet (API only, above), and a contract line covering several SKUs can't be priced per SKU yet.
+- Preview features (Okta and Google Workspace discovery, ServiceNow and Halo ticket connections) are hidden by default and have not been tested against live tenants.
+- End of life: the overview has no criticality or owner filter in the API (the app filters on screen), and an instance's version can't be edited in the app yet.
+- Audit events are kept forever; configurable retention isn't built.
+- The hosted edition has no billing and no transactional email provider yet; it sends email through the installation's SMTP or Microsoft Graph settings.
+- Imports of more than 500 rows run inside the request rather than as a background job; about 5,000 rows is the practical limit before the 120-second request timeout.
+- Webhook deliveries are queued in one order across all organizations, so one organization that produces a flood of events delays the others' deliveries.
+- The web app's router (react-router 6) has moderate security advisories that need the migration to react-router 7; none is rated high.
+- Release images are built for linux/amd64 only; on arm64, build from source.

@@ -1,0 +1,18 @@
+{
+  "result": [
+    {
+      "number": {
+        "display_value": "INC0010001",
+        "value": "INC0010001"
+      },
+      "state": {
+        "display_value": "In Progress",
+        "value": "2"
+      },
+      "short_description": {
+        "display_value": "Synthetic incident title",
+        "value": "Synthetic incident title"
+      }
+    }
+  ]
+}

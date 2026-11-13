@@ -1,0 +1,18 @@
+---
+/** The Softwarden mark: an S drawn as one line through three ledger rows, on a rounded tile. */
+interface Props {
+  size?: number;
+  class?: string;
+}
+const { size = 24, class: className } = Astro.props;
+---
+<svg class={className} width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+  <rect x="2" y="2" width="28" height="28" rx="7" fill="var(--primary)"></rect>
+  <path
+    d="M22.5 10H12.5a3 3 0 0 0 0 6h7a3 3 0 0 1 0 6H9.5"
+    stroke="#fff"
+    stroke-width="3.2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"></path>
+</svg>

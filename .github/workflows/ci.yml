@@ -1,0 +1,380 @@
+# Softwarden CI. Every push and pull request: lint, type-check, pytest, SPA build, image build (also
+# with the optional OpenTelemetry extra), the full Playwright suite in 4 shards, a dependency audit, the deployment
+# files (Helm, Caddy, shell scripts), a Compose first run, and an upgrade rehearsal from the previous release. Every
+# Monday the dependency audit runs alone too, so a new advisory shows up between pushes. A v* tag runs release.yml,
+# which calls this workflow on the tagged commit before it builds anything, then publishes the images.
+#
+# What a green run means: no test failed, none was flaky (failed, then passed on
+# Playwright's one retry: ops/ci/test-report-check.py fails the shard), and pytest skipped nothing but the live-tenant
+# tests (the same script on pytest's JUnit report). Every job has a timeout.
+name: CI
+
+on:
+  # A change only to the website (site/) runs site.yml instead. workflow_call has no path filter: a release always
+  # runs every job.
+  push:
+    branches: [main]
+    paths-ignore: ["site/**"]
+  pull_request:
+    paths-ignore: ["site/**"]
+  # release.yml's `ci` job: a release is never built from a commit CI hasn't passed.
+  workflow_call:
+  # The dependency audit alone, weekly; every other job has `if: github.event_name != 'schedule'`.
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  # The weekly audit has its own group, so it neither waits for nor cancels a run on main.
+  group: ci-${{ github.ref }}${{ github.event_name == 'schedule' && '-audit' || '' }}
+  # A newer push to a pull request supersedes the run; runs on main always finish, so every commit there has a result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  POSTGRES_PORT: "5432"
+
+jobs:
+  api:
+    name: API (Ruff, mypy, pytest)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:17.11-trixie@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f  # compose.yaml's tag (tests/test_upgrade_ci.py)
+        env: { POSTGRES_DB: softwarden, POSTGRES_USER: softwarden, POSTGRES_PASSWORD: softwarden-dev }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U softwarden" --health-interval 5s --health-retries 10
+    defaults:
+      run: { working-directory: apps/api }
+    # Development mode, off by default: manage.py runs on the development secret key here.
+    # pytest and mypy load tests/settings.py, which sets it too.
+    env: { SOFTWARDEN_DEBUG: "1" }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        with: { version: "0.9.18", enable-cache: true }
+      - run: uv sync --frozen
+      # tests/test_typescript_client.py compiles a client generated from the schema with apps/web's openapi-typescript
+      # and tsc; it fails rather than skips when CI is set.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: "22.16", cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - run: npm ci
+        working-directory: apps/web
+      # apps/web/src/generated/openapi.d.ts is committed and must match the schema; only this job has uv and node.
+      - name: Generated API types are current
+        run: npm run api:check
+        working-directory: apps/web
+        env: { SOFTWARDEN_API_TYPES_CHECK: required }
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy .
+      - run: uv run python manage.py makemigrations --check --dry-run
+      # The real pg_dump and pg_restore for tests/test_backup.py's full backup, which fails rather than skips
+      # when CI is set: the runner's own client is older than the postgres:17 service. From the PostgreSQL project's
+      # apt repository, signed by the key committed in docker/pgdg/ (the Dockerfile's, fingerprint checked by
+      # tests/test_backup_stack.py), never a key fetched here (ops/ci/check-pins.sh); 17 is the major the image ships.
+      - name: PostgreSQL 17 client (pg_dump, pg_restore)
+        working-directory: .
+        run: |
+          sudo install -D -m 644 docker/pgdg/ACCC4CF8.asc /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version | grep " 17\."
+      # The tests marked `otel` need the optional extra, which this environment (like the default image) doesn't have:
+      # they run in the image job's WITH_OTEL=1 leg instead. -rs lists every skip with its reason.
+      - run: uv run pytest -q -rs -m "not otel" --junitxml="$RUNNER_TEMP/pytest.xml"
+      # Nothing may skip here but the live-tenant tests (tests/conftest.py, "live test: ..."): a test that skips on the
+      # runner for a missing tool would otherwise pass unseen.
+      - name: Only the live-tenant tests skipped
+        if: success() || failure()
+        run: python3 ../../ops/ci/test-report-check.py pytest-skips "$RUNNER_TEMP/pytest.xml" --allow "live test:"
+
+  # The MCP server package (mcp/, docs/MCP.md): its own uv project. The end-to-end check against the real API runs in
+  # the api job (apps/api/tests/test_mcp_e2e.py imports mcp/softwarden_mcp).
+  mcp:
+    name: MCP server (Ruff, mypy, pytest)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run: { working-directory: mcp }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        with: { version: "0.9.18", enable-cache: true }
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy .
+      - run: uv run pytest -q
+
+  web:
+    name: Web (ESLint, tsc, Vite build)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run: { working-directory: apps/web }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: "22.16", cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build # tsc --noEmit, then vite build
+      - name: "Initial JS bundle size (230 KB gzipped or less)"
+        # What dist/index.html loads before any lazy route (scripts and modulepreloads), gzip -9, at most 230,000 B (bundle-size.mjs LIMIT).
+        run: npm run size
+
+  # Two legs: the default image (and the MCP image), and the image with the optional OpenTelemetry extra
+  # (WITH_OTEL=1, docs/ENV.md), which the default never carries. The OTel leg runs the tests marked `otel` with the extra
+  # installed (none may skip) and then the same probe inside the built image, as its web and worker processes.
+  image:
+    name: Docker image${{ matrix.otel == '1' && ' (WITH_OTEL=1)' || '' }}
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        otel: ["0", "1"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - run: docker build --build-arg WITH_OTEL=${{ matrix.otel }} --tag softwarden:ci .
+      - if: matrix.otel == '0'
+        run: docker build --build-context cacerts=ca-certs --tag softwarden-mcp:ci mcp
+      - if: matrix.otel == '0'
+        run: docker compose --profile mcp config --quiet
+      # The image carries THIRD_PARTY_NOTICES with both parts (Python from uv export, npm from the SPA's lock).
+      - name: THIRD_PARTY_NOTICES is in the image
+        run: |
+          docker run --rm --entrypoint cat softwarden:ci /app/THIRD_PARTY_NOTICES > "$RUNNER_TEMP/notices.txt"
+          grep -q "^PART 1. PYTHON PACKAGES" "$RUNNER_TEMP/notices.txt"
+          grep -q "^PART 2. NPM PACKAGES" "$RUNNER_TEMP/notices.txt"
+          grep -q "^Django " "$RUNNER_TEMP/notices.txt" && grep -q "^react " "$RUNNER_TEMP/notices.txt"
+      - if: matrix.otel == '1'
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        with: { version: "0.9.18", enable-cache: true }
+      - name: The OpenTelemetry tests, with the extra
+        if: matrix.otel == '1'
+        working-directory: apps/api
+        run: |
+          uv sync --frozen --extra otel
+          uv run pytest -q -rs -m otel --junitxml="$RUNNER_TEMP/pytest-otel.xml"
+          python3 ../../ops/ci/test-report-check.py pytest-skips "$RUNNER_TEMP/pytest-otel.xml"
+      - name: OpenTelemetry inside the WITH_OTEL=1 image
+        if: matrix.otel == '1'
+        run: bash ops/ci/otel-image-probe.sh softwarden:ci
+
+  e2e:
+    name: Playwright (shard ${{ matrix.shard }} of 4)
+    needs: [api, web]
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:17.11-trixie@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f  # compose.yaml's tag (tests/test_upgrade_ci.py)
+        env: { POSTGRES_DB: softwarden, POSTGRES_USER: softwarden, POSTGRES_PASSWORD: softwarden-dev }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U softwarden" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        with: { version: "0.9.18", enable-cache: true }
+      - run: uv sync --frozen
+        working-directory: apps/api
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: "22.16", cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - run: npm ci
+        working-directory: apps/web
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      # The whole suite (the journey, first-run setup, axe checks, every screen), split by Playwright across four
+      # runners; it replaces the journey-and-setup smoke run. Each shard is its own runner, so playwright.config.ts's
+      # default ports and databases (E2E_API_PORT, E2E_WEB_PORT, E2E_DB, E2E_SETUP_DB) can't collide.
+      - run: npx playwright test --shard ${{ matrix.shard }}/4
+        working-directory: apps/web
+        # Also start the hosted (cloud) e2e server pair, so e2e/cloud.spec.ts runs (playwright.config.ts).
+        env: { E2E_CLOUD: "1" }
+      # playwright.config.ts retries a failed test once in CI; a test that then passes is flaky, and a flaky test
+      # fails the shard here, named with its first error. Also names the failed ones when the run itself failed.
+      - name: No flaky or failed tests
+        if: success() || failure()
+        run: python3 ops/ci/test-report-check.py playwright apps/web/test-results/results.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: failure()
+        with:
+          name: "playwright-report-${{ matrix.shard }}"
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results/results.json
+          retention-days: 7
+
+  # Known vulnerabilities in what ships: the API's and the MCP server's locked
+  # runtime requirements (every extra, no dev tools) through pip-audit, and the SPA's production npm dependencies at
+  # moderate or above, less the advisories apps/web/audit-allowlist.json accepts, each with its reason and a date to
+  # look again. apps/web is the only npm project; mcp/ is Python only. Also runs alone every Monday (schedule).
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
+        with: { version: "0.9.18", enable-cache: true }
+      - name: API (pip-audit)
+        working-directory: apps/api
+        run: |
+          uv export --frozen --no-dev --all-extras --no-emit-project --format requirements-txt --quiet -o "$RUNNER_TEMP/api-requirements.txt"
+          uvx pip-audit@2.10.1 --disable-pip --progress-spinner off -r "$RUNNER_TEMP/api-requirements.txt"
+      - name: MCP server (pip-audit)
+        working-directory: mcp
+        run: |
+          uv export --frozen --no-dev --all-extras --no-emit-project --format requirements-txt --quiet -o "$RUNNER_TEMP/mcp-requirements.txt"
+          uvx pip-audit@2.10.1 --disable-pip --progress-spinner off -r "$RUNNER_TEMP/mcp-requirements.txt"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: "22.16" }
+      - name: Web (npm audit, moderate and above, through the allow-list)
+        run: |
+          # npm audit exits non-zero whenever it reports anything; the check below decides.
+          (cd apps/web && npm audit --omit=dev --json > "$RUNNER_TEMP/npm-audit.json") || true
+          python3 ops/ci/npm-audit-check.py "$RUNNER_TEMP/npm-audit.json" apps/web/audit-allowlist.json
+
+  # The deployment files no other job exercises: the Helm chart (default values, the external-Postgres example and the
+  # cloud values), the Caddyfile under the exact caddy tag compose.yaml pins, and the shell scripts.
+  deploy-config:
+    name: Helm, Caddy and shell scripts
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4.3.1
+        with: { version: "v3.19.0" }
+      - run: helm lint deploy/helm/softwarden
+      - run: helm lint deploy/helm/softwarden -f deploy/helm/softwarden/examples/external-postgres.yaml
+      - run: helm template softwarden deploy/helm/softwarden > /dev/null
+      - run: helm template softwarden deploy/helm/softwarden -f deploy/helm/softwarden/examples/external-postgres.yaml > /dev/null
+      # The hosted (cloud) values (docs/CLOUD.md), and the chart's guards (softwarden.validate): each unsafe set of values
+      # must fail to render with its own message.
+      - run: helm lint deploy/helm/softwarden -f deploy/helm/softwarden/values-cloud.yaml
+      - run: helm template softwarden deploy/helm/softwarden -f deploy/helm/softwarden/values-cloud.yaml > /dev/null
+      - name: helm template refuses unsafe values
+        run: |
+          chart=deploy/helm/softwarden
+          refused() {
+            message=$1; shift
+            if out=$(helm template s "$chart" "$@" 2>&1); then echo "rendered: $*"; exit 1; fi
+            if ! printf '%s' "$out" | grep -qF "$message"; then echo "wrong refusal for $*: $out"; exit 1; fi
+          }
+          cloud="-f $chart/values-cloud.yaml"
+          refused "set secrets.existingSecret" $cloud --set secrets.existingSecret=
+          refused "database.existingSecret" $cloud --set database.existingSecret=
+          refused "the database password never goes in values" $cloud --set database.existingSecret= --set database.password=x
+          refused "set database.sslmode to require" $cloud --set database.sslmode=prefer
+          refused "set smtp.host" $cloud --set smtp.host=
+          refused "set smtp.existingSecret for its password" $cloud --set smtp.existingSecret=
+          refused "shares the attachment files" --set worker.replicas=2
+          refused "mounts the backup volume" $cloud --set persistence.backups.accessMode=ReadWriteOnce
+          refused "deployment must be selfhosted or cloud" --set deployment=saas
+          # An SMTP relay without a user needs no password Secret.
+          helm template s "$chart" $cloud --set smtp.user= --set smtp.existingSecret= > /dev/null
+      - name: caddy validate (the pinned image)
+        run: |
+          image=$(docker compose config --format json | jq -r .services.proxy.image)
+          echo "Caddy image: $image"
+          # The default (Caddy's local CA) is validated in full. The provided-certificate form with the MCP route is
+          # only adapted: its certificate files don't exist here.
+          docker run --rm -v "$PWD/docker/Caddyfile:/etc/caddy/Caddyfile:ro" "$image" \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm -e PUBLIC_HOSTNAME=softwarden.example.com -e CADDY_TLS="/certs/cert.pem /certs/key.pem" \
+            -e SOFTWARDEN_MCP_UPSTREAM=mcp:8001 -v "$PWD/docker/Caddyfile:/etc/caddy/Caddyfile:ro" "$image" \
+            caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
+      - name: shellcheck
+        run: shellcheck --severity=warning ops/*.sh ops/ci/*.sh scripts/*.sh
+      # Every action by commit SHA, every base and Compose image by digest, every uvx tool by version.
+      - name: Actions and images are pinned
+        run: bash ops/ci/check-pins.sh
+      # Every relative link and anchor in the Markdown resolves (tests/test_doc_links.py runs it too).
+      - name: Markdown links resolve
+        run: python3 ops/ci/check-doc-links.py
+
+  # Developer Certificate of Origin (CONTRIBUTING.md): every commit a pull request adds is signed off by its
+  # author. Making this check required is a branch-protection setting on GitHub.
+  dco:
+    name: DCO sign-off
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { fetch-depth: 0, ref: "${{ github.event.pull_request.head.sha }}" }
+      - name: Every commit is signed off by its author
+        run: bash ops/ci/check-dco.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+
+  # docs/INSTALL.md step 4b on a clean runner: no .env, build, start and wait, then the checks the guide makes.
+  compose-first-run:
+    name: Compose first run
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - run: docker compose up -d --build --wait --wait-timeout 600
+      - run: docker compose exec -T app python manage.py bootstrap_admin --prepare
+      - name: doctor (JSON, no failure)
+        run: |
+          docker compose exec -T app python manage.py doctor --json > "$RUNNER_TEMP/doctor.json" || true
+          jq '{status, counts, not_ok: [.checks[] | select(.status != "ok") | {name, status, message}]}' "$RUNNER_TEMP/doctor.json"
+          jq -e '.status != "fail"' "$RUNNER_TEMP/doctor.json" > /dev/null
+      - name: Caddy serves the SPA and /readyz
+        run: |
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors -k https://localhost/ | grep -q '<div id="root">'
+          # 503 until the worker's first tick; --wait already waited for its heartbeat, the retries cover the rest.
+          curl -fsS --retry 20 --retry-delay 3 --retry-all-errors -k https://localhost/readyz
+          echo
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)
+          echo "plain HTTP: $code"
+          test "$code" = "301"
+      # Unauthenticated clients trickling request bodies must not stop the app. /healthz and /
+      # answer in under a second throughout, with 3 and then 30 such connections held for 40 s.
+      - name: Slow request bodies don't stop the app
+        run: |
+          python3 ops/ci/slowbody-smoke.py --connections 3 --hold 40
+          python3 ops/ci/slowbody-smoke.py --connections 30 --hold 40
+      # The worker's own backup (core/backup.py, with the image's pg_dump 17) restores. Seeds
+      # demo data and an attachment, takes a set with `backup_now --inline` in the worker, copies it and the generated
+      # key out, and proves it with `ops/restore.sh --rehearse` (scratch database, migrate --check, upgrade_check
+      # --manifest, verify_attachments on its media archive, stored secrets), which must check an attachment file and
+      # the manifest. Last, because it adds the demo data.
+      - name: The worker's backup restores (backup_now, then restore.sh --rehearse)
+        run: bash ops/ci/inapp-backup-rehearsal.sh
+      - if: failure()
+        run: docker compose ps && docker compose logs --no-color --tail 200
+      - if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  # Upgrades: a restore rehearsal from the previous tagged release passes in CI. Build
+  # the previous release tag (the newest v* tag before this commit; until the first release is tagged, the job skips), seed it,
+  # back it up with its ops/backup.sh, then restore that set under this commit's image (rehearsal, real restore,
+  # migrate, upgrade_check --manifest, doctor). The same script runs locally: bash ops/ci/restore-previous.sh.
+  migrate-from-previous:
+    name: Migrate from previous release
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { fetch-depth: 0 }  # the release tags and their history
+      - run: bash ops/ci/restore-previous.sh

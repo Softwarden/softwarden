@@ -1,0 +1,5 @@
+{
+  "_status": "HTTP/1.1 429 Too many requests",
+  "Retry-After": "<seconds>",
+  "x-ms-ratelimit-remaining-subscription-reads": "11999"
+}

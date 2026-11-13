@@ -1,0 +1,348 @@
+# Softwarden on one host: Caddy (TLS) in front of the web/API container, the background
+# worker and PostgreSQL 17. No `.env` is needed: on first start the one-shot `init` service generates the Django key,
+# the database password and the credential encryption key into the `softwarden-secrets` volume
+# (apps/api/softwarden/init_secrets.py). Any of them set in `.env` or the shell wins.
+#   docker compose up -d --build        full stack on https://localhost (Caddy's local CA; the browser warns until you
+#                                       trust it). Then `docker compose exec app python manage.py bootstrap_admin`
+#                                       prints the one-time setup token and, once, the credential key to back up.
+#   scripts/setup.ps1, scripts/setup.sh the same with preflight checks (Docker, TLS interception, ports)
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d db
+#                                       just the database (password softwarden-dev), for running the API and Vite locally
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d db mailpit
+#                                       the database and a local mail catcher (http://127.0.0.1:8025, SMTP on
+#                                       127.0.0.1:1025) for running the API and worker locally (compose.dev.yaml)
+# `docker compose down -v` deletes the volumes, including the credential key and attachment files: back them up first
+# (docs/INSTALL.md, docs/04-development/backup-runbook.md).
+x-env-file: &env-file
+  - path: .env
+    required: false
+
+x-app-env: &app-env
+  # `selfhosted`, or `cloud` to evaluate the hosted, multi-organization mode on one host (docs/CLOUD.md; Helm is the
+  # supported way to run it hosted).
+  SOFTWARDEN_DEPLOYMENT: ${SOFTWARDEN_DEPLOYMENT:-selfhosted}
+  # Generated secrets (init service) are read from here unless the variables below are set.
+  SOFTWARDEN_SECRETS_DIR: /data/secrets
+  SOFTWARDEN_SECRET_KEY: ${SOFTWARDEN_SECRET_KEY:-}
+  SOFTWARDEN_ALLOWED_HOSTS: ${SOFTWARDEN_ALLOWED_HOSTS:-${PUBLIC_HOSTNAME:-localhost},127.0.0.1}
+  SOFTWARDEN_CSRF_TRUSTED_ORIGINS: ${SOFTWARDEN_CSRF_TRUSTED_ORIGINS:-https://${PUBLIC_HOSTNAME:-localhost}}
+  SOFTWARDEN_SECURE_COOKIES: ${SOFTWARDEN_SECURE_COOKIES:-1}
+  SOFTWARDEN_BASE_URL: ${SOFTWARDEN_BASE_URL:-https://${PUBLIC_HOSTNAME:-localhost}}
+  # Only Caddy may set X-Forwarded-For (client address for rate limits) and X-Forwarded-Proto (core/middleware.py).
+  SOFTWARDEN_TRUSTED_PROXIES: ${SOFTWARDEN_TRUSTED_PROXIES:-proxy}
+  # Email is off unless SOFTWARDEN_SMTP_HOST is set; actions stay in Needs attention either way.
+  SOFTWARDEN_SMTP_HOST: ${SOFTWARDEN_SMTP_HOST:-}
+  SOFTWARDEN_SMTP_PORT: ${SOFTWARDEN_SMTP_PORT:-587}
+  SOFTWARDEN_SMTP_USER: ${SOFTWARDEN_SMTP_USER:-}
+  SOFTWARDEN_SMTP_PASSWORD: ${SOFTWARDEN_SMTP_PASSWORD:-}
+  SOFTWARDEN_SMTP_TLS: ${SOFTWARDEN_SMTP_TLS:-1}
+  SOFTWARDEN_EMAIL_FROM: ${SOFTWARDEN_EMAIL_FROM:-Softwarden <softwarden@localhost>}
+  # The credential encryption keyring (core/credentials.py). Unset: the generated key in the secrets volume.
+  # SOFTWARDEN_SECRETS_KEY is the legacy key: it still decrypts what it encrypted, nothing new uses it.
+  SOFTWARDEN_CREDENTIAL_KEYS: ${SOFTWARDEN_CREDENTIAL_KEYS:-}
+  # Or a file of keys, one per line, newest first; it wins over both. The path is inside the containers: mount the
+  # file into app, worker and init yourself (for example a `volumes:` entry `/srv/softwarden/keys:/run/keys:ro` in a
+  # compose.override.yaml, with SOFTWARDEN_CREDENTIAL_KEYS_FILE=/run/keys).
+  SOFTWARDEN_CREDENTIAL_KEYS_FILE: ${SOFTWARDEN_CREDENTIAL_KEYS_FILE:-}
+  SOFTWARDEN_SECRETS_KEY: ${SOFTWARDEN_SECRETS_KEY:-}
+  # Legacy Entra sign-in: used only while the instance has one organization and it hasn't activated sign-in
+  # settings of its own (Admin > Sign-in). Offered only when all three are set. Deprecated.
+  SOFTWARDEN_OIDC_TENANT: ${SOFTWARDEN_OIDC_TENANT:-}
+  SOFTWARDEN_OIDC_CLIENT_ID: ${SOFTWARDEN_OIDC_CLIENT_ID:-}
+  SOFTWARDEN_OIDC_CLIENT_SECRET: ${SOFTWARDEN_OIDC_CLIENT_SECRET:-}
+  # Break-glass: 1 hides and refuses every single sign-on route; password sign-in always works (docs runbook).
+  SOFTWARDEN_FORCE_LOCAL_LOGIN: ${SOFTWARDEN_FORCE_LOCAL_LOGIN:-}
+  # On by default: a signed-in session's PATCH or DELETE without If-Match is a 428 (API tokens are exempt); the web app
+  # sends it from every edit form. 0 turns it off (docs/ENV.md).
+  SOFTWARDEN_REQUIRE_IF_MATCH: ${SOFTWARDEN_REQUIRE_IF_MATCH:-}
+  # Preview features (off in 1.0.0; docs/CAPABILITIES.md): Okta and Google Workspace discovery, ServiceNow and Halo
+  # ticket connections. Unset or 0: hidden for every organization, their data kept. 1 turns them on.
+  SOFTWARDEN_PREVIEW_FEATURES: ${SOFTWARDEN_PREVIEW_FEATURES:-}
+  # Demo only (docs/ENV.md): 1 allows the simulated tenants and hosts (synthetic data) that seed_demo uses. Leave it
+  # unset on a real installation: simulated connections are then refused, and any left from a demo never run.
+  SOFTWARDEN_ALLOW_SIMULATED: ${SOFTWARDEN_ALLOW_SIMULATED:-}
+  # The assistant (capability `assistant`, discovery/assistant.py): the model, its prices if it isn't built in (JSON,
+  # USD per million tokens), and the installation's Anthropic key for organizations that enter none of their own.
+  SOFTWARDEN_ASSISTANT_MODEL: ${SOFTWARDEN_ASSISTANT_MODEL:-claude-sonnet-5-5}
+  SOFTWARDEN_ASSISTANT_PRICES: ${SOFTWARDEN_ASSISTANT_PRICES:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  # Without this ceiling (USD per organization per month) the installation key above is never used.
+  SOFTWARDEN_ASSISTANT_INSTALLATION_CAP_USD: ${SOFTWARDEN_ASSISTANT_INSTALLATION_CAP_USD:-}
+  # The largest multipart request read at all, in MB (core/upload_limit.py); Caddy gets the same value below. Keep it at
+  # least SOFTWARDEN_ATTACHMENT_MAX_MB + 1 (a start-up check, softwarden.E105, refuses less).
+  SOFTWARDEN_MAX_REQUEST_MB: ${SOFTWARDEN_MAX_REQUEST_MB:-26}
+  # The worker's nightly encrypted backups (core/backup.py, backup runbook) into the softwarden-backups volume
+  # (/data/backups, set by the image). The key: unset, the init service's generated `backup_key` in the secrets volume
+  # (the System page warns until an Admin confirms a copy is off the host); or a path inside the containers to your
+  # own key file, mounted into worker and app yourself. Cron in UTC.
+  SOFTWARDEN_BACKUP_KEY_FILE: ${SOFTWARDEN_BACKUP_KEY_FILE:-}
+  SOFTWARDEN_BACKUP_CRON: ${SOFTWARDEN_BACKUP_CRON:-30 2 * * *}
+  SOFTWARDEN_BACKUP_KEEP_DAILY: ${SOFTWARDEN_BACKUP_KEEP_DAILY:-14}
+  SOFTWARDEN_BACKUP_KEEP_WEEKLY: ${SOFTWARDEN_BACKUP_KEEP_WEEKLY:-8}
+  # /healthz/ops, the operator health view (docs/04-development/operations.md): this bearer token or an Admin session. Unset,
+  # the init service's generated `ops_token` in the secrets volume.
+  SOFTWARDEN_OPS_TOKEN: ${SOFTWARDEN_OPS_TOKEN:-}
+  # JSON log lines with request ids (default), or `text` for reading locally.
+  SOFTWARDEN_LOG_FORMAT: ${SOFTWARDEN_LOG_FORMAT:-json}
+  # Optional OpenTelemetry trace export over OTLP/HTTP; needs the image built with WITH_OTEL=1. Other OTEL_* settings
+  # go in .env.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }  # log rotation
+
+# Container hardening, the Helm chart's pod security in Compose terms: no process can gain
+# privileges (no-new-privileges, so a SUID binary or file capability gives nothing), every capability a service doesn't
+# use is dropped (the app image's services keep none), and the root filesystem is read-only, with a tmpfs /tmp for
+# what is written there (uploads over 2.5 MB are staged in /tmp; a tmpfs counts in the container's memory). Each
+# service also has a memory and a process limit, so a runaway process stops its own container, not the host. The
+# sizes are in docs/04-development/operations.md ("Container limits"); change one in a compose.override.yaml.
+x-hardened: &hardened
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  # One-shot: creates any missing secret in the secrets volume, then exits; never replaces one. Root only to read
+  # the database volume (to tell a new database from an existing one) and to hand the files to the app user.
+  init:
+    image: ${SOFTWARDEN_IMAGE:-softwarden:local}
+    user: "0:0"
+    <<: *hardened
+    init: true  # as every service of the app image: an init is PID 1 (signals forwarded, children reaped)
+    # Root keeps only what it uses: hand the files to uid 10001 (CHOWN, FOWNER) and read the database volume, which
+    # belongs to the postgres user (DAC_OVERRIDE).
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    tmpfs: ["/tmp:size=16m"]
+    mem_limit: 256m
+    pids_limit: 64
+    env_file: *env-file
+    environment:
+      SOFTWARDEN_SECRETS_DIR: /data/secrets
+      # The database container mounts this volume, not the secrets volume: a copy of postgres_password, nothing else.
+      SOFTWARDEN_DB_SECRETS_DIR: /data/db-secrets
+      SOFTWARDEN_PGDATA: /pgdata
+      SOFTWARDEN_SECRET_KEY: ${SOFTWARDEN_SECRET_KEY:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      SOFTWARDEN_CREDENTIAL_KEYS: ${SOFTWARDEN_CREDENTIAL_KEYS:-}
+      SOFTWARDEN_CREDENTIAL_KEYS_FILE: ${SOFTWARDEN_CREDENTIAL_KEYS_FILE:-}
+      SOFTWARDEN_BACKUP_KEY_FILE: ${SOFTWARDEN_BACKUP_KEY_FILE:-}
+      SOFTWARDEN_OPS_TOKEN: ${SOFTWARDEN_OPS_TOKEN:-}
+    command: ["python", "-m", "softwarden.init_secrets"]
+    volumes:
+      - softwarden-secrets:/data/secrets
+      - softwarden-db-secrets:/data/db-secrets
+      - softwarden-db:/pgdata:ro
+    healthcheck:
+      disable: true
+    logging: *logging
+    restart: "no"
+
+  db:
+    # Pinned to an exact release (upgrade runbook, "Pinned images"); a minor bump is a reviewed change, never a pull.
+    # Debian trixie, the base `postgres:17` resolved to when installs were created: keeping the C library the same
+    # keeps the database's text collation (and so its indexes) valid.
+    image: postgres:17.11-trixie@sha256:ff87138949ad9a46f32ff23bd6852b52ce024a13dffe9b4087be98292cdd3b4f
+    # Not read-only (PostgreSQL writes its socket and lock files outside the data volume), but no new privileges and
+    # only the capabilities the image's entrypoint uses as root: fix the data directory's owner and mode (CHOWN,
+    # FOWNER, DAC_OVERRIDE, which also reads the password file), then drop to the postgres user (SETUID, SETGID).
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    pids_limit: 256  # max_connections is 100, one process each
+    environment:
+      POSTGRES_DB: softwarden
+      POSTGRES_USER: softwarden
+      # Read once, when the database is created; the init service writes it (or copies POSTGRES_PASSWORD into it).
+      POSTGRES_PASSWORD_FILE: /run/softwarden/postgres_password
+    # Not published on the host: the app reaches it inside the compose network. compose.dev.yaml publishes it on
+    # 127.0.0.1:${POSTGRES_PORT:-5434} for running the API outside Docker.
+    volumes:
+      - softwarden-db:/var/lib/postgresql/data
+      # Its own volume with the password alone (init copies it there), never the secrets volume with the credential,
+      # backup and Django keys.
+      - softwarden-db-secrets:/run/softwarden:ro
+    depends_on:
+      init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U softwarden"]
+      interval: 5s
+      retries: 10
+    logging: *logging
+    restart: unless-stopped
+
+  # One-shot: applies the migrations (forward-only), then exits; the app starts only once it has exited 0. Its own
+  # service, not the app's start command (as the Helm chart's migrate Job), so a long migration on a slow host or an
+  # upgrade never counts against the app's healthcheck, and app replicas never race on it.
+  # `docker compose up` runs it again each time; with nothing to apply it exits in seconds. A failed migration stops
+  # here: `docker compose logs migrate`.
+  migrate:
+    image: ${SOFTWARDEN_IMAGE:-softwarden:local}
+    <<: *hardened
+    init: true
+    tmpfs: ["/tmp:size=256m"]
+    mem_limit: 1g
+    pids_limit: 128
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: *env-file
+    environment: *app-env
+    command: ["python", "manage.py", "migrate", "--noinput"]
+    volumes:
+      - softwarden-secrets:/data/secrets:ro
+    healthcheck:
+      disable: true
+    logging: *logging
+    restart: "no"
+
+  app:
+    build: .
+    # Pin a release tag on a server, for example SOFTWARDEN_IMAGE=ghcr.io/softwarden/softwarden:1.0.0 (docs/INSTALL.md); see the upgrade runbook.
+    image: ${SOFTWARDEN_IMAGE:-softwarden:local}
+    <<: *hardened
+    init: true
+    # /tmp: multipart uploads over 2.5 MB are staged here, up to SOFTWARDEN_MAX_REQUEST_MB each (the Helm chart's
+    # tmpSizeLimit). mem_limit covers gunicorn (SOFTWARDEN_WORKERS x SOFTWARDEN_THREADS) and a full /tmp; raise both
+    # with more workers or a larger request limit (operations.md, "Container limits").
+    tmpfs: ["/tmp:size=256m"]
+    mem_limit: 1536m
+    pids_limit: 512
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    env_file: *env-file
+    environment: *app-env
+    # The image's start command minus the migration (the migrate service ran it): while first-run setup is open it
+    # writes the one-time token, then serves.
+    command: ["sh", "-c", "python manage.py bootstrap_admin --prepare && exec gunicorn softwarden.wsgi"]
+    volumes:
+      - softwarden-secrets:/data/secrets:ro
+      - softwarden-bootstrap:/data/bootstrap
+      - softwarden-media:/data/media  # attachment files (SOFTWARDEN_MEDIA_ROOT); back it up with the database
+    # Not published on the host: Caddy (proxy) is the only way in. compose.dev.yaml publishes 127.0.0.1:8080 for
+    # debugging.
+    logging: *logging
+    restart: unless-stopped
+
+  # Fires the schedules (daily digest, discovery connectors, import purges) and runs queued jobs: one tick a minute,
+  # PostgreSQL-backed, no broker; one log line per tick. The migrate service runs the migrations; the worker waits for
+  # the app to be healthy.
+  worker:
+    image: ${SOFTWARDEN_IMAGE:-softwarden:local}
+    <<: *hardened
+    init: true  # the backup's pg_dump and openssl children are reaped even when a run is killed
+    # /tmp holds the backup's private scratch folder and the heartbeat file; pg_dump and tar stream to the backups
+    # volume.
+    tmpfs: ["/tmp:size=128m"]
+    mem_limit: 1g
+    pids_limit: 256
+    depends_on:
+      app: { condition: service_healthy }
+    env_file: *env-file
+    environment: *app-env
+    command: ["python", "manage.py", "run_worker"]
+    volumes:
+      - softwarden-secrets:/data/secrets:ro
+      - softwarden-media:/data/media  # the nightly attachments.sweep deletes removed files here; backups read it
+      # Backup sets (core/backup.py), written as uid 10001. To keep them on another disk, bind-mount a directory owned
+      # by 10001 here instead, in a compose.override.yaml (backup runbook).
+      - softwarden-backups:/data/backups
+    # On SIGTERM the worker stops claiming and lets the job in progress finish (a tick spends at most 50 s on jobs);
+    # Docker's default 10 s would SIGKILL it mid-job and leave the job abandoned.
+    stop_grace_period: 90s
+    # Healthy while the heartbeat is fresh (beats every 30 s, stale after 180 s), so `docker compose up --wait` can
+    # wait for it.
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "run_worker", "--check"]
+      interval: 30s
+      timeout: 20s
+      start_period: 60s
+      retries: 3
+    logging: *logging
+    restart: unless-stopped
+
+  # The MCP server (docs/MCP.md), only with `docker compose --profile mcp up -d` and SOFTWARDEN_MCP_UPSTREAM=mcp:8001
+  # (in .env, so Caddy routes to it): streamable HTTP behind Caddy at https://${PUBLIC_HOSTNAME}/mcp. Each MCP client
+  # sends its own Softwarden API token (Authorization: Bearer sw_...), checked with the API before any tool runs, so
+  # that person's role and read-only setting apply; this service holds no token and no secret. It calls the app
+  # inside the compose network (app:8000) under the public host name.
+  mcp:
+    profiles: [mcp]
+    build:
+      context: ./mcp
+      additional_contexts:
+        cacerts: ./ca-certs
+    image: ${SOFTWARDEN_MCP_IMAGE:-softwarden-mcp:local}
+    <<: *hardened
+    init: true
+    tmpfs: ["/tmp:size=16m"]
+    mem_limit: 256m
+    pids_limit: 128
+    environment:
+      SOFTWARDEN_URL: http://app:8000
+      SOFTWARDEN_HOST_HEADER: ${PUBLIC_HOSTNAME:-localhost}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8001"
+      # Host and Origin validation (DNS rebinding guard): the public name, with any port (a non-default HTTPS_PORT).
+      MCP_ALLOWED_HOSTS: ${PUBLIC_HOSTNAME:-localhost},${PUBLIC_HOSTNAME:-localhost}:*
+      MCP_ALLOWED_ORIGINS: https://${PUBLIC_HOSTNAME:-localhost},https://${PUBLIC_HOSTNAME:-localhost}:*
+      # Off unless set to 1: the write tools (each still needs a token that isn't read-only, and If-Match).
+      MCP_ENABLE_WRITES: ${MCP_ENABLE_WRITES:-0}
+      # The client's address from Caddy's X-Forwarded-For (for the limit on refused tokens per address): only Caddy
+      # and the other compose services can reach this one, which is not published, and Caddy sends exactly one
+      # address there (docker/Caddyfile, header_up X-Forwarded-For {client_ip}).
+      MCP_FORWARDED_ALLOW_IPS: "*"
+    depends_on:
+      app: { condition: service_healthy }
+    # Not published on the host: Caddy (proxy) routes /mcp to it.
+    logging: *logging
+    restart: unless-stopped
+
+  # TLS and security headers in front of the app (docker/Caddyfile). CADDY_TLS=internal (default) uses Caddy's own
+  # local CA; for a real certificate set CADDY_TLS="/certs/cert.pem /certs/key.pem" with the files in TLS_CERT_DIR.
+  proxy:
+    image: caddy:2.11.9@sha256:0c2243efcf437ab7f7a978f1027fcf0d4f9be8a75df27b1b3fbc5dbe0ffa8cf0  # pinned, like db; CI runs `caddy validate` on docker/Caddyfile with this tag
+    <<: *hardened
+    cap_add: [NET_BIND_SERVICE]  # Caddy runs as root in its image; this is all it needs to bind 80 and 443
+    tmpfs: ["/tmp:size=16m"]
+    # Caddy holds each request body in memory until it has all of it (request_buffers in docker/Caddyfile, up to
+    # SOFTWARDEN_MAX_REQUEST_MB, 26 MiB by default) so slow uploads tie up only the proxy. 512 MiB is about
+    # 64 MiB for Caddy plus 16 largest uploads in flight at once; past that the proxy is restarted, the host and the
+    # other services are not touched. Caddy sets its Go memory limit from this one. Raise it with
+    # SOFTWARDEN_MAX_REQUEST_MB (operations.md, "Container limits").
+    mem_limit: 512m
+    pids_limit: 256
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}
+      CADDY_TLS: ${CADDY_TLS:-internal}
+      HTTPS_PORT: ${HTTPS_PORT:-443}  # the HTTP -> HTTPS redirect keeps the published port
+      SOFTWARDEN_MAX_REQUEST_MB: ${SOFTWARDEN_MAX_REQUEST_MB:-26}  # request_body max_size, as the app's limit
+      # The MCP route (docs/MCP.md): empty, /mcp is a 404; with the `mcp` profile set it to mcp:8001 (in .env).
+      SOFTWARDEN_MCP_UPSTREAM: ${SOFTWARDEN_MCP_UPSTREAM:-}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${TLS_CERT_DIR:-./certs}:/certs:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app: { condition: service_healthy }
+    logging: *logging
+    restart: unless-stopped
+
+volumes:
+  softwarden-db:
+  softwarden-secrets:    # generated secrets; back up the credential key off the server (docs/INSTALL.md)
+  softwarden-db-secrets: # a copy of the database password alone, for the db container (init writes it)
+  softwarden-bootstrap:  # the one-time setup token and the "credential key shown" marker
+  softwarden-media:      # attachment files; back up with the database (docs runbook), never served as static files
+  softwarden-backups:    # the worker's encrypted backup sets; copy them off the host too (backup runbook)
+  caddy-data:            # Caddy's local CA and certificates
+  caddy-config:

@@ -1,0 +1,84 @@
+# Development overrides, layered on compose.yaml:
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d db     the database for runserver, Vite and Playwright
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d --build the full stack, also on http://127.0.0.1:8080
+# The database password is the fixed development one (settings.py falls back to it), unless POSTGRES_PASSWORD is set.
+# The dev stack keeps its data in volumes of its own (softwarden-dev-*, below), so it never meets the plain stack's
+# database and secrets: a plain `docker compose up` generates a password into softwarden-db/softwarden-secrets, this file
+# uses softwarden-dev for softwarden-dev-db/softwarden-dev-secrets, and switching between the two needs no `down -v`.
+# (Earlier versions used the same volumes for both; the dev stack's old data stays in softwarden-db, untouched. Re-run
+# `migrate` and `seed_demo` once against the new dev database.)
+# Simulated tenants and hosts (seed_demo's Entra connector, *.simulated.invalid) are allowed on the dev stack
+# (SOFTWARDEN_ALLOW_SIMULATED, docs/ENV.md), so `seed_demo` and its connector runs work here.
+# Mail goes to Mailpit (a local catcher; web view http://127.0.0.1:8025, SMTP 127.0.0.1:1025): it is the installation's
+# SMTP default for the dev stack, so digests and test sends from Email settings land there and nowhere else.
+# Never use this file on a server.
+services:
+  init:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-softwarden-dev}
+    # Compose merges service volumes by their path in the container, so these replace compose.yaml's entries.
+    volumes:
+      - softwarden-dev-secrets:/data/secrets
+      - softwarden-dev-db-secrets:/data/db-secrets
+      - softwarden-dev-db:/pgdata:ro
+
+  db:
+    # Published for runserver, Vite and Playwright outside Docker, loopback only (compose.yaml publishes nothing but
+    # the proxy).
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - softwarden-dev-db:/var/lib/postgresql/data
+      - softwarden-dev-db-secrets:/run/softwarden:ro
+
+  migrate:
+    volumes:
+      - softwarden-dev-secrets:/data/secrets:ro
+
+  app:
+    # A plain-HTTP debug port next to Caddy, loopback only; cookies are not Secure so sign-in works over it.
+    ports:
+      - "127.0.0.1:8080:8000"
+    volumes:
+      - softwarden-dev-secrets:/data/secrets:ro
+      - softwarden-dev-bootstrap:/data/bootstrap
+      - softwarden-dev-media:/data/media
+    environment:
+      SOFTWARDEN_SECURE_COOKIES: "0"
+      SOFTWARDEN_ALLOW_SIMULATED: ${SOFTWARDEN_ALLOW_SIMULATED:-1}
+      SOFTWARDEN_CSRF_TRUSTED_ORIGINS: https://localhost,http://localhost:8080,http://127.0.0.1:8080
+      SOFTWARDEN_BASE_URL: ${SOFTWARDEN_BASE_URL:-http://localhost:8080}
+      SOFTWARDEN_SMTP_HOST: ${SOFTWARDEN_SMTP_HOST:-mailpit}
+      SOFTWARDEN_SMTP_PORT: ${SOFTWARDEN_SMTP_PORT:-1025}
+      SOFTWARDEN_SMTP_TLS: ${SOFTWARDEN_SMTP_TLS:-0}
+
+  worker:
+    volumes:
+      - softwarden-dev-secrets:/data/secrets:ro
+      - softwarden-dev-media:/data/media
+      - softwarden-dev-backups:/data/backups
+    environment:
+      SOFTWARDEN_BASE_URL: ${SOFTWARDEN_BASE_URL:-http://localhost:8080}
+      SOFTWARDEN_SMTP_HOST: ${SOFTWARDEN_SMTP_HOST:-mailpit}
+      SOFTWARDEN_SMTP_PORT: ${SOFTWARDEN_SMTP_PORT:-1025}
+      SOFTWARDEN_SMTP_TLS: ${SOFTWARDEN_SMTP_TLS:-0}
+      SOFTWARDEN_ALLOW_SIMULATED: ${SOFTWARDEN_ALLOW_SIMULATED:-1}
+
+  # A local mail catcher, loopback only. Ports clear of 5434 (db), 8080 (app), 5173/5174 (Vite), 8011 (e2e API).
+  mailpit:
+    image: axllent/mailpit:v1.21.8@sha256:81370195cd4a0eab9604d17c2617a7525b0486f9365555253b6c5376c6350f1a
+    ports:
+      - "127.0.0.1:8025:8025"   # web view
+      - "127.0.0.1:1025:1025"   # SMTP, for an API or worker run outside Docker
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+# The dev stack's own data (see the top of this file). Caddy's volumes are shared: they hold only its local CA.
+volumes:
+  softwarden-dev-db:
+  softwarden-dev-secrets:
+  softwarden-dev-db-secrets:
+  softwarden-dev-bootstrap:
+  softwarden-dev-media:
+  softwarden-dev-backups:

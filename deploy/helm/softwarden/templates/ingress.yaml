@@ -1,0 +1,39 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "softwarden.fullname" . }}
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts: [{{ .Values.publicHostname | quote }}]
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.publicHostname | quote }}
+      http:
+        paths:
+          {{- if .Values.mcp.enabled }}
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "softwarden.fullname" . }}-mcp
+                port: { name: http }
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "softwarden.fullname" . }}-app
+                port: { name: http }
+{{- end }}

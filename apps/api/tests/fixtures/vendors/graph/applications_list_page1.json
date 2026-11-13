@@ -1,0 +1,83 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#applications",
+  "@odata.nextLink": "https://graph.microsoft.com/v1.0/applications?$expand=owners($select=id,displayName,mail,userPrincipalName)&$top=100&$skiptoken=m~AQAoOzAxOTk3MTE1OTYyMDQ4MGE4YzE0ZjlkNWM0Y2ViMjE5OzswOzA7Ow",
+  "@microsoft.graph.tips": "Use $select to choose only the properties your app needs, as this can lead to performance improvements. For example: GET applications?$select=addIns,api",
+  "value": [
+    {
+      "id": "00000000-0000-0000-0000-000000000101",
+      "appId": "00000000-0000-0000-0000-000000000201",
+      "displayName": "Contoso Web",
+      "publisherDomain": "example.com",
+      "signInAudience": "AzureADMyOrg",
+      "identifierUris": [
+        "api://00000000-0000-0000-0000-000000000201"
+      ],
+      "createdDateTime": "2024-01-15T10:00:00Z",
+      "description": null,
+      "notes": null,
+      "tags": [],
+      "web": {
+        "homePageUrl": "https://app1.example.com/"
+      },
+      "keyCredentials": [],
+      "passwordCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "Synthetic secret",
+          "endDateTime": "2027-01-01T00:00:00Z",
+          "hint": "abc",
+          "keyId": "00000000-0000-0000-0000-000000000301",
+          "secretText": null,
+          "startDateTime": "2025-01-01T00:00:00Z"
+        }
+      ],
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-0000-0000-000000000401",
+          "displayName": "Alex Example",
+          "mail": "alex@example.com",
+          "userPrincipalName": "alex@example.com"
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000102",
+      "appId": "00000000-0000-0000-0000-000000000202",
+      "displayName": "Fabrikam Reports",
+      "publisherDomain": "example.com",
+      "signInAudience": "AzureADMyOrg",
+      "identifierUris": [
+        "http://fabrikam.example.com/"
+      ],
+      "createdDateTime": "2024-01-15T10:00:00Z",
+      "description": null,
+      "notes": null,
+      "tags": [],
+      "web": {
+        "homePageUrl": "https://app2.example.com/"
+      },
+      "keyCredentials": [],
+      "passwordCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "Synthetic secret",
+          "endDateTime": "2027-01-01T00:00:00Z",
+          "hint": "abc",
+          "keyId": "00000000-0000-0000-0000-000000000302",
+          "secretText": null,
+          "startDateTime": "2025-01-01T00:00:00Z"
+        }
+      ],
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-0000-0000-000000000402",
+          "displayName": "Alex Example",
+          "mail": "alex@example.com",
+          "userPrincipalName": "alex@example.com"
+        }
+      ]
+    }
+  ]
+}

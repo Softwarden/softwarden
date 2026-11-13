@@ -1,0 +1,65 @@
+# Dependabot: keeps the pins current. The workflows' actions are pinned to commit SHAs
+# with the version in a comment, and the base and Compose images to digests; ops/ci/check-pins.sh (CI's deploy-config
+# job) refuses anything unpinned. Dependabot proposes each update as a pull request, which runs the full CI.
+# Weekly, grouped by ecosystem so a week's updates arrive as one pull request each. Major versions come separately:
+# they can change behavior, so each one is read before it is merged.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  # Dockerfile (node, python, uv) and mcp/Dockerfile (python, uv): tag and digest.
+  - package-ecosystem: docker
+    directories: [/, /mcp]
+    schedule: { interval: weekly }
+    groups:
+      base-images:
+        update-types: [minor, patch]
+    ignore:
+      # The image's Python and Node lines are chosen, not followed: 3.13 and 22 (CLAUDE.md, "Stack").
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  # compose.yaml (postgres, caddy) and compose.dev.yaml (mailpit). Dependabot does NOT update the `services: postgres`
+  # images in .github/workflows/ci.yml, and tests/test_upgrade_ci.py requires them to equal compose.yaml's, so a
+  # postgres pull request from here fails CI until the same reference is copied into ci.yml (both services) on its
+  # branch. Likewise the Dockerfile's python reference must be copied into scripts/setup.sh and setup.ps1
+  # (tests/test_compose.py), which Dependabot doesn't read either.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      compose-images:
+        update-types: [minor, patch]
+    ignore:
+      # A PostgreSQL major is a data migration, not a pull (upgrade runbook, "Pinned images").
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: uv
+    directories: [/apps/api, /mcp]
+    schedule: { interval: weekly }
+    groups:
+      python:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule: { interval: weekly }
+    groups:
+      web:
+        update-types: [minor, patch]
+
+  # The website (site/): its own lockfile, never in the image.
+  - package-ecosystem: npm
+    directory: /site
+    schedule: { interval: weekly }
+    groups:
+      site:
+        update-types: [minor, patch]

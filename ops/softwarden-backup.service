@@ -1,0 +1,22 @@
+# Example systemd unit for the nightly Softwarden backup. Copy to /etc/systemd/system/, then edit the
+# three paths marked CHANGE. See docs/04-development/backup-runbook.md.
+[Unit]
+Description=Softwarden nightly encrypted database backup
+Wants=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+# CHANGE: the Compose project directory (where compose.yaml and .env live).
+WorkingDirectory=/opt/softwarden
+# CHANGE: the share or folder your organization provides, and the key file (mode 600, outside the project directory).
+Environment=BACKUP_DEST=/mnt/softwarden-backups
+Environment=BACKUP_KEY_FILE=/etc/softwarden/backup.key
+# CHANGE: the path to the repository's ops folder.
+ExecStart=/opt/softwarden/ops/backup.sh
+# Output goes to the journal: journalctl -u softwarden-backup
+User=softwarden-backup
+Group=docker
+UMask=0077
+Nice=10
+TimeoutStartSec=2h

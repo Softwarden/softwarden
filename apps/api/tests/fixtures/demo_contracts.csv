@@ -1,0 +1,10 @@
+name,vendor,contract_number,amount,currency,billing_frequency,start_date,end_date,auto_renew,notice_value,notice_unit,renewal_owner_email,renewal_owner_name,status,cost_center,renewal,create_renewal_obligation,items,notes
+Microsoft 365 E5 EA,Microsoft,MS-EA-2026,52000,USD,monthly,2026-03-01,2027-02-28,yes,60,days,priya.shah@example.com,Priya Shah,active,CC-100,,,Microsoft 365=70; Entra ID=30,Demo: E5 enterprise agreement
+Atlassian Cloud Premium,Atlassian,ATL-38000,38000,USD,annual,2026-04-01,2027-03-31,unknown,1,months,priya.shah@example.com,Priya Shah,active,CC-210,,true,Jira=60; Confluence,Demo: fixed and shared lines
+Veeva Vault QMS subscription,Veeva,VV-QMS-3Y,180000,EUR,multi_year,2025-01-01,2027-12-31,yes,90,days,priya.shah@example.com,Priya Shah,active,CC-400,,,Veeva Vault QMS,Demo: three-year term
+SAP maintenance,SAP,SAP-MNT-95,95000,USD,annual,2026-01-01,2026-12-31,no,,,priya.shah@example.com,Priya Shah,pending_renewal,CC-300,,,SAP S/4HANA,Demo: notice 0 in the original demo; renew before it ends
+Falcon Enterprise,CrowdStrike,CS-FALCON,4100,USD,monthly,2026-05-01,2027-04-30,yes,2,months,priya.shah@example.com,Priya Shah,active,CC-100,Falcon renewal,,Falcon EDR,Demo: linked to an existing renewal
+Anthropic API,Anthropic,ANT-API,18000,USD,usage_based,2026-07-01,2027-06-30,no,30,days,priya.shah@example.com,Priya Shah,active,CC-100,,,agent:IT Ticket Triage,Demo: usage-based estimate
+Okta Workforce Identity,Okta,OKTA-WF,7500,GBP,quarterly,2025-09-01,2026-08-31,yes,6,months,,,active,,,,Entra ID,Added: quarterly in another currency
+Logic Apps consumption,Microsoft,AZ-LA-2028,3000,USD,semiannual,2026-06-01,2028-05-31,yes,3,months,,,active,CC-100,,,component:New Hire Onboarding=100,Added: every six months; leap-year clamp
+Vault validation package,Veeva,VV-VAL-1,25000,EUR,one_time,2026-01-15,2026-12-15,no,,,,,active,CC-400,,,Veeva Vault QMS=50; SAP S/4HANA,Added: one-time charge

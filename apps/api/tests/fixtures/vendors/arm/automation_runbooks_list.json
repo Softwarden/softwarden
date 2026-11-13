@@ -1,0 +1,20 @@
+{
+  "value": [
+    {
+      "name": "ASR-AddPublicIp",
+      "type": "Microsoft.Automation/AutomationAccounts/Runbooks",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/rg/providers/Microsoft.Automation/automationAccounts/ContosoAutomationAccount/runbooks/ASR-AddPublicIp",
+      "location": "East US 2",
+      "properties": {
+        "creationTime": "2017-03-28T21:32:25.78+00:00",
+        "lastModifiedTime": "2017-03-28T21:32:25.81+00:00",
+        "logActivityTrace": 1,
+        "logProgress": true,
+        "logVerbose": true,
+        "runbookType": "PowerShellWorkflow",
+        "runtimeEnvironment": "environmentName",
+        "state": "Published"
+      }
+    }
+  ]
+}

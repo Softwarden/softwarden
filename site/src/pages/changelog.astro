@@ -1,0 +1,33 @@
+---
+import { getEntry } from 'astro:content';
+import Docs from '../layouts/Docs.astro';
+import { applyRepoLinks } from '../lib/repo-html';
+import { headingsOf } from '../lib/headings';
+
+const entry = await getEntry('changelog', 'changelog');
+if (!entry) throw new Error('CHANGELOG.md was not loaded');
+
+let html = applyRepoLinks(entry.rendered?.html ?? '');
+// Keep the opening sentence; the paragraph after it is for maintainers (how releases are cut).
+const firstH2 = html.indexOf('<h2');
+if (firstH2 > 0) {
+  const intro = html.slice(0, firstH2);
+  const firstPara = intro.match(/<p>[\s\S]*?<\/p>/)?.[0] ?? '';
+  html = firstPara + html.slice(firstH2);
+}
+// Drop an empty [Unreleased] section.
+html = html.replace(/<h2 id="unreleased">\[Unreleased\]<\/h2>\s*(?=<h2)/, '');
+
+const headings = headingsOf(entry).filter(
+  (h) => h.slug !== 'unreleased' && h.depth >= 2 && h.depth <= 3,
+);
+---
+<Docs
+  title="Changelog"
+  description="Every release of Softwarden, newest first: what was added, security changes and known limitations."
+  headings={headings}
+  source="CHANGELOG.md"
+  current="changelog"
+>
+  <Fragment set:html={html} />
+</Docs>

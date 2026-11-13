@@ -1,0 +1,41 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#applications",
+  "value": [
+    {
+      "id": "00000000-0000-0000-0000-000000000103",
+      "appId": "00000000-0000-0000-0000-000000000203",
+      "displayName": "Last Page App",
+      "publisherDomain": "example.com",
+      "signInAudience": "AzureADMyOrg",
+      "identifierUris": [],
+      "createdDateTime": "2024-01-15T10:00:00Z",
+      "description": null,
+      "notes": null,
+      "tags": [],
+      "web": {
+        "homePageUrl": "https://app3.example.com/"
+      },
+      "keyCredentials": [],
+      "passwordCredentials": [
+        {
+          "customKeyIdentifier": null,
+          "displayName": "Synthetic secret",
+          "endDateTime": "2027-01-01T00:00:00Z",
+          "hint": "abc",
+          "keyId": "00000000-0000-0000-0000-000000000303",
+          "secretText": null,
+          "startDateTime": "2025-01-01T00:00:00Z"
+        }
+      ],
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-0000-0000-000000000403",
+          "displayName": "Alex Example",
+          "mail": "alex@example.com",
+          "userPrincipalName": "alex@example.com"
+        }
+      ]
+    }
+  ]
+}

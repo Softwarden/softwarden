@@ -1,0 +1,270 @@
+---
+/**
+ * The Needs attention queue as HTML, with records from the Contoso demo seed. The app's status vocabulary: glyph
+ * plus text, gaps as dashed chips with specific text.
+ */
+type Chip = { cls: string; glyph: string; text: string };
+type Row = { name: string; kind: string; kindCls?: string; todo: Chip[] | string; status: Chip };
+
+const rows: Row[] = [
+  {
+    name: 'Service Desk Portal',
+    kind: 'Application',
+    kindCls: 'kind-application',
+    todo: [
+      { cls: 'gap', glyph: '⚠', text: 'No business owner' },
+      { cls: 'gap', glyph: '⚠', text: 'No technical owner' },
+    ],
+    status: { cls: 'unreviewed', glyph: '○', text: 'Unreviewed' },
+  },
+  {
+    name: 'Zoom Pro',
+    kind: 'Renewal',
+    todo: 'Record a decision before the action deadline',
+    status: { cls: 'overdue', glyph: '!', text: 'Overdue' },
+  },
+  {
+    name: 'Nightly Payroll Export',
+    kind: 'Component',
+    kindCls: 'kind-component',
+    todo: 'Its link to Workday HR changed owner after it was confirmed',
+    status: { cls: 'pending link-check', glyph: '?', text: 'Needs verification' },
+  },
+  {
+    name: 'Invoice Triage Agent',
+    kind: 'AI agent',
+    kindCls: 'kind-agent',
+    todo: [
+      { cls: 'gap', glyph: '⚠', text: 'No technical owner' },
+      { cls: 'gap', glyph: '⚠', text: 'No human-in-loop decision' },
+    ],
+    status: { cls: 'unreviewed', glyph: '○', text: 'Unreviewed' },
+  },
+  {
+    name: 'Workday 2027R1 upgrade',
+    kind: 'Change assessment',
+    todo: 'The affected set changed since the snapshot was taken',
+    status: { cls: 'pending', glyph: '↻', text: 'Stale snapshot' },
+  },
+  {
+    name: 'New Vendor Portal',
+    kind: 'Discovery, Entra ID',
+    todo: 'Link it to a record, create one or dismiss it',
+    status: { cls: 'unreviewed', glyph: '○', text: 'New' },
+  },
+];
+---
+<div class="queue">
+  <div class="q-head">
+    <div class="q-title">
+      <span class="q-name">Needs attention</span>
+      <span class="q-org">Contoso, demo data</span>
+    </div>
+    <div class="q-scope" aria-hidden="true">
+      <span class="on">All <b>6</b></span>
+      <span>Assigned to me</span>
+    </div>
+  </div>
+  <div class="q-scroll" role="region" aria-labelledby="queue-caption" tabindex="0">
+    <table>
+      <caption id="queue-caption" class="visually-hidden">Example Needs attention queue, with records from the Contoso demo data</caption>
+      <thead>
+        <tr>
+          <th scope="col">Record</th>
+          <th scope="col">What needs doing</th>
+          <th scope="col">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((r) => (
+            <tr>
+              <th scope="row" data-label="Record">
+                <span class="r-name">{r.name}</span>
+                {r.kindCls ? <span class:list={['kind', r.kindCls]}>{r.kind}</span> : <span class="r-kind">{r.kind}</span>}
+              </th>
+              <td data-label="What needs doing">
+                {typeof r.todo === 'string' ? (
+                  <span class="todo">{r.todo}</span>
+                ) : (
+                  <span class="chip-group">
+                    {r.todo.map((c) => (
+                      <span class:list={['chip', c.cls]}>
+                        <span class="chip-glyph" aria-hidden="true">{c.glyph}</span>
+                        {c.text}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </td>
+              <td data-label="Status">
+                <span class:list={['chip', r.status.cls]}>
+                  <span class="chip-glyph" aria-hidden="true">{r.status.glyph}</span>
+                  {r.status.text}
+                </span>
+              </td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .queue {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-width: 0;
+  }
+  .q-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .q-title {
+    display: grid;
+  }
+  .q-name {
+    font-size: 16px;
+    font-weight: 650;
+    color: var(--text-strong);
+    letter-spacing: -0.01em;
+  }
+  .q-org {
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .q-scope {
+    display: inline-flex;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    font-size: 13px;
+  }
+  .q-scope span {
+    padding: 5px 10px;
+    color: var(--muted-foreground);
+  }
+  .q-scope span + span {
+    border-left: 1px solid var(--border-strong);
+  }
+  .q-scope .on {
+    background: var(--accent);
+    color: var(--accent-foreground);
+    font-weight: 500;
+  }
+  .q-scope b {
+    font-weight: 600;
+    font-feature-settings: 'tnum';
+  }
+  .q-scroll {
+    overflow-x: auto;
+  }
+  .q-scroll:focus-visible {
+    outline-offset: -2px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  thead th {
+    background: var(--table-head);
+    color: var(--muted-foreground);
+    font-weight: 500;
+    font-size: 13px;
+    text-align: left;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody th,
+  tbody td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+    text-align: left;
+    font-weight: 400;
+  }
+  tbody tr:last-child th,
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  tbody tr:hover {
+    background: var(--row-hover);
+  }
+  tbody th {
+    min-width: 170px;
+  }
+  .r-name {
+    display: block;
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .r-kind {
+    font-size: 12px;
+    color: var(--muted-foreground);
+  }
+  .kind {
+    margin-top: 2px;
+  }
+  .todo {
+    color: var(--foreground);
+  }
+  td:nth-child(2) {
+    min-width: 220px;
+  }
+  .chip.link-check {
+    border-style: dashed;
+  }
+  /* Queue tables stack below 640 px using each cell's data-label (DESIGN.md, Layout) */
+  @media (max-width: 640px) {
+    thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    table,
+    tbody,
+    tr,
+    tbody th,
+    tbody td {
+      display: block;
+      width: 100%;
+    }
+    tr {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    tbody tr:last-child {
+      border-bottom: 0;
+    }
+    tbody th,
+    tbody td {
+      padding: 0;
+      border: 0;
+      min-width: 0;
+    }
+    tbody td {
+      margin-top: 8px;
+    }
+    tbody th {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 8px;
+    }
+    .r-name {
+      display: inline;
+    }
+  }
+</style>

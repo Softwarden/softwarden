@@ -1,0 +1,6 @@
+{
+  "_status": "HTTP/1.1 429 Too Many Requests",
+  "x-rate-limit-limit": "100",
+  "x-rate-limit-remaining": "0",
+  "x-rate-limit-reset": "1760000060"
+}

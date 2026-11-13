@@ -1,0 +1,79 @@
+---
+import { DOCS, DOC_GROUPS, docUrl } from '../lib/docs-manifest';
+
+interface Props {
+  currentSlug?: string;
+  label: string;
+}
+const { currentSlug, label } = Astro.props;
+---
+<nav class="docs-nav" aria-label={label}>
+  <a class="docs-home" href="/docs/" aria-current={currentSlug === undefined ? 'page' : undefined}>Overview</a>
+  {
+    DOC_GROUPS.map((g) => (
+      <div class="group">
+        <p class="group-title">{g}</p>
+        <ul>
+          {DOCS.filter((d) => d.group === g).map((d) => (
+            <li>
+              <a href={docUrl(d)} aria-current={d.slug === currentSlug ? 'page' : undefined}>
+                {d.nav}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))
+  }
+  <div class="group">
+    <p class="group-title">Project</p>
+    <ul>
+      <li><a href="/changelog/">Changelog</a></li>
+    </ul>
+  </div>
+</nav>
+
+<style>
+  .docs-nav {
+    display: grid;
+    gap: 18px;
+    font-size: 14.5px;
+  }
+  .group {
+    display: grid;
+    gap: 4px;
+  }
+  .group-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
+    padding-inline: 10px;
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1px;
+  }
+  a {
+    display: block;
+    padding: 5px 10px;
+    border-radius: var(--radius-md);
+    color: var(--muted-foreground);
+    text-decoration: none;
+    line-height: 1.4;
+  }
+  a:hover {
+    color: var(--foreground);
+    background: var(--row-hover);
+  }
+  a[aria-current='page'] {
+    color: var(--accent-foreground);
+    background: var(--accent);
+    font-weight: 550;
+  }
+  .docs-home {
+    font-weight: 500;
+  }
+</style>

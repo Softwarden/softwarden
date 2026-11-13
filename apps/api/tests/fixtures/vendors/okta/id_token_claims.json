@@ -1,0 +1,40 @@
+{
+  "header": {
+    "alg": "RS256",
+    "kid": "SYNTHETIC-KID"
+  },
+  "payload": {
+    "ver": 1,
+    "sub": "00u00000000000000001",
+    "iss": "https://example.okta.com",
+    "aud": "0oa00000000000000009",
+    "iat": 1760000000,
+    "exp": 1760003600,
+    "amr": [
+      "pwd"
+    ],
+    "jti": "ID.SYNTHETIC",
+    "auth_time": 1760000000,
+    "at_hash": "SYNTHETIC",
+    "name": "John Doe",
+    "nickname": "Jimmy",
+    "preferred_username": "john.doe@example.com",
+    "given_name": "John",
+    "middle_name": "James",
+    "family_name": "Doe",
+    "profile": "https://example.com/profile/00u00000000000000001",
+    "zoneinfo": "UTC",
+    "locale": "en-US",
+    "updated_at": 1311280970,
+    "email": "john.doe@example.com",
+    "email_verified": true,
+    "address": {
+      "street_address": "1 Example Street",
+      "locality": "Example City",
+      "region": "EX",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "phone_number": "+1 (555) 010-0000"
+  }
+}

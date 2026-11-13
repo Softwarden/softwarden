@@ -1,0 +1,137 @@
+{
+ "schema_version": "1.2.1",
+ "generated_at": "2026-11-09T00:10:09+00:00",
+ "total": 10,
+ "result": [
+  {
+   "name": "django",
+   "aliases": [],
+   "label": "Django",
+   "category": "framework",
+   "tags": [
+    "framework",
+    "python-runtime"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/django"
+  },
+  {
+   "name": "mssqlserver",
+   "aliases": [
+    "mssql",
+    "microsoftsqlserver"
+   ],
+   "label": "Microsoft SQL Server",
+   "category": "database",
+   "tags": [
+    "database",
+    "microsoft"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/mssqlserver"
+  },
+  {
+   "name": "mysql",
+   "aliases": [],
+   "label": "MySQL",
+   "category": "database",
+   "tags": [
+    "database",
+    "oracle"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/mysql"
+  },
+  {
+   "name": "nodejs",
+   "aliases": [
+    "node"
+   ],
+   "label": "Node.js",
+   "category": "framework",
+   "tags": [
+    "framework",
+    "herodevs",
+    "javascript-runtime",
+    "linux-foundation"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/nodejs"
+  },
+  {
+   "name": "postgresql",
+   "aliases": [
+    "postgres",
+    "pg",
+    "psql",
+    "pgsql"
+   ],
+   "label": "PostgreSQL",
+   "category": "database",
+   "tags": [
+    "database"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/postgresql"
+  },
+  {
+   "name": "python",
+   "aliases": [],
+   "label": "Python",
+   "category": "lang",
+   "tags": [
+    "lang"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/python"
+  },
+  {
+   "name": "rhel",
+   "aliases": [
+    "redhat",
+    "redhatlinux"
+   ],
+   "label": "Red Hat Enterprise Linux",
+   "category": "os",
+   "tags": [
+    "linux-distribution",
+    "os",
+    "red-hat"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/rhel"
+  },
+  {
+   "name": "tomcat",
+   "aliases": [],
+   "label": "Apache Tomcat",
+   "category": "server-app",
+   "tags": [
+    "apache",
+    "server-app",
+    "web-server"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/tomcat"
+  },
+  {
+   "name": "ubuntu",
+   "aliases": [
+    "ubuntu-linux"
+   ],
+   "label": "Ubuntu",
+   "category": "os",
+   "tags": [
+    "linux-distribution",
+    "os"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/ubuntu"
+  },
+  {
+   "name": "windows-server",
+   "aliases": [
+    "windowsserver"
+   ],
+   "label": "Microsoft Windows Server",
+   "category": "os",
+   "tags": [
+    "microsoft",
+    "os",
+    "windows"
+   ],
+   "uri": "https://endoflife.date/api/v1/products/windows-server"
+  }
+ ]
+}

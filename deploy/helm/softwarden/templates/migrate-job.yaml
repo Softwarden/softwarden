@@ -1,0 +1,53 @@
+{{- /* Forward-only migrations before every install and upgrade (compose: the one-shot migrate service). A failed migration
+fails the release, and the running pods keep the previous version. Take a backup before upgrading (README).
+Exactly one pod migrates: the app never does (its command has no migrate), the Job runs one pod at a time
+(parallelism 1, completions 1; a retry starts only after the failed pod ended), and Helm holds a release lock, so two
+upgrades of one release can't overlap (docs/CLOUD.md, Migrations). */ -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "softwarden.fullname" . }}-migrate
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  parallelism: 1
+  completions: 1
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "softwarden.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false  # never calls the Kubernetes API
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- include "softwarden.secretsInit" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "softwarden.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          env:
+            {{- include "softwarden.env" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - { name: secrets, mountPath: /data/secrets, readOnly: true }
+            {{- include "softwarden.commonMounts" . | nindent 12 }}
+      volumes:
+        {{- include "softwarden.secretVolumes" . | nindent 8 }}

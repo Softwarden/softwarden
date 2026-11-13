@@ -1,0 +1,40 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+playwright-report/
+test-results/
+
+# Local state
+.env
+.env.*
+!.env.example
+# AI coding assistants' local settings
+.claude
+backups/
+*.log
+.impeccable/
+
+# First-run and TLS material that belongs to one machine
+apps/api/.bootstrap/
+apps/api/media/
+ca-certs/*.crt
+ca-certs/*.pem
+/certs/
+
+# Local tool state (not part of this repository)
+.agents/
+.codex/
+*.tsbuildinfo
+
+# Pre-release review working notes and review reports (never commit)
+review-scratch/
+/*_REVIEW_*.md
+/*_PROMPT_*.md

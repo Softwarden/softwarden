@@ -1,0 +1,78 @@
+{
+  "value": [
+    {
+      "id": "/providers/Microsoft.BusinessAppPlatform/scopes/admin/environments/00000000-0000-0000-0000-000000004001",
+      "type": "Microsoft.BusinessAppPlatform/scopes/environments",
+      "location": "unitedstates",
+      "name": "00000000-0000-0000-0000-000000004001",
+      "properties": {
+        "azureRegion": "westus",
+        "displayName": "My Power Platform Environment",
+        "description": "This is my environment purpose description",
+        "createdTime": "2020-10-22T04:38:17.8550157Z",
+        "createdBy": {
+          "id": "00000000-0000-0000-0000-000000004002",
+          "displayName": "ServicePrincipal",
+          "type": "ServicePrincipal",
+          "tenantId": "00000000-0000-0000-0000-0000000000a0"
+        },
+        "lastModifiedTime": "2021-02-22T18:38:08.4718532Z",
+        "provisioningState": "Succeeded",
+        "creationType": "User",
+        "environmentSku": "Sandbox",
+        "isDefault": false,
+        "capacity": [
+          {
+            "capacityType": "Database",
+            "actualConsumption": 1392.68,
+            "ratedConsumption": 1392.68,
+            "capacityUnit": "MB",
+            "updatedOn": "2021-02-23T04:41:01Z"
+          }
+        ],
+        "addons": [
+          {
+            "addonType": "AppPass",
+            "allocated": 1,
+            "addonUnit": "Unit"
+          }
+        ],
+        "clientUris": {
+          "admin": "https://admin.powerplatform.microsoft.com/environments/00000000-0000-0000-0000-000000004001/hub",
+          "maker": "https://make.powerapps.com/environments/00000000-0000-0000-0000-000000004001/home"
+        },
+        "runtimeEndpoints": {
+          "microsoft.BusinessAppPlatform": "https://unitedstates.api.bap.microsoft.com",
+          "microsoft.CommonDataModel": "https://unitedstates.api.cds.microsoft.com",
+          "microsoft.PowerApps": "https://unitedstates.api.powerapps.com",
+          "microsoft.Flow": "https://unitedstates.api.flow.microsoft.com"
+        },
+        "databaseType": "CommonDataService",
+        "linkedEnvironmentMetadata": {
+          "resourceId": "00000000-0000-0000-0000-000000004003",
+          "friendlyName": "My Power Platform Environment",
+          "uniqueName": "synthetic0000",
+          "domainName": "org00000001",
+          "version": "9.2.21013.00152",
+          "instanceUrl": "https://org00000001.crm.dynamics.com/",
+          "instanceApiUrl": "https://org00000001.api.crm.dynamics.com",
+          "baseLanguage": 1033,
+          "instanceState": "Ready",
+          "createdTime": "2020-10-22T04:38:24.003Z",
+          "backgroundOperationsState": "Enabled",
+          "scaleGroup": "SYNTHETICSG001",
+          "platformSku": "Standard"
+        },
+        "states": {
+          "management": {
+            "id": "Ready"
+          },
+          "runtime": {
+            "id": "Enabled"
+          }
+        },
+        "connectedGroups": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "_status": "HTTP/1.1 200 OK",
+  "link": [
+    "<https://example.okta.com/api/v1/apps?limit=200&includeNonDeleted=true>; rel=\"self\"",
+    "<https://example.okta.com/api/v1/apps?after=0oa00000000000000002&limit=200&includeNonDeleted=true>; rel=\"next\""
+  ],
+  "x-rate-limit-limit": "100",
+  "x-rate-limit-remaining": "99",
+  "x-rate-limit-reset": "1760000060"
+}

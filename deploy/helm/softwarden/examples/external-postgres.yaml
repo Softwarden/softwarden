@@ -1,0 +1,46 @@
+# A production-shaped install on a managed PostgreSQL 17 (Azure Database for PostgreSQL flexible server, Amazon RDS,
+# Cloud SQL) with every secret created beforehand (README, "Before you install").
+#   helm install softwarden deploy/helm/softwarden -n softwarden -f deploy/helm/softwarden/examples/external-postgres.yaml
+image:
+  repository: ghcr.io/softwarden/softwarden
+  tag: "1.0.0"   # pin the release; upgrade by changing it
+
+publicHostname: softwarden.contoso.example
+
+database:
+  host: contoso-pg.postgres.database.azure.com
+  port: 5432
+  name: softwarden
+  user: softwarden
+  existingSecret: softwarden-database      # key `password`
+  existingSecretPasswordKey: password
+  sslmode: require
+  # Azure's built-in PgBouncer (port 6432) refuses the `options` parameter: use "on" there and run
+  # `ALTER ROLE softwarden SET jit = off;` once. On port 5432 (no pooler) leave it "off".
+  jit: "off"
+
+secrets:
+  existingSecret: softwarden-keys          # django_secret_key, credential_keys, backup_key, ops_token
+
+smtp:
+  host: smtp.contoso.example
+  port: 587
+  user: softwarden
+  from: "Softwarden <softwarden@contoso.example>"
+  existingSecret: softwarden-smtp          # key `smtp-password`
+
+ingress:
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 26m
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "on"
+    cert-manager.io/cluster-issuer: letsencrypt
+  tls:
+    enabled: true
+    secretName: softwarden-tls
+
+persistence:
+  media:
+    size: 20Gi
+  backups:
+    size: 50Gi

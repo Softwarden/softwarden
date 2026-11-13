@@ -1,0 +1,93 @@
+[project]
+name = "softwarden-api"
+version = "1.0.0"
+description = "Softwarden API, worker and web app server"
+license = "Apache-2.0"
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=1,<2",
+    "cryptography>=50.0.0,<51",
+    "django>=5.2,<5.3",
+    "django-filter>=25.1,<26",
+    "djangorestframework>=3.15,<4",
+    "drf-spectacular>=0.30.0",
+    "gunicorn>=26.2,<27",
+    "openpyxl>=3.1,<4",
+    "psycopg[binary]>=3.2,<4",
+    "pyjwt>=2.10,<3",
+    "pyyaml>=6.0.3,<7",
+    "whitenoise>=6.12,<7",
+]
+
+[project.optional-dependencies]
+# Optional OpenTelemetry trace export (softwarden/otel.py, observability): not in the default image; the image
+# installs it with `--build-arg WITH_OTEL=1`, a local environment with `uv sync --extra otel`. OTLP over HTTP only, so
+# no grpcio.
+otel = [
+    "opentelemetry-sdk>=1.30,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.30,<2",
+    "opentelemetry-instrumentation-django>=0.51b0,<1",
+    "opentelemetry-instrumentation-psycopg>=0.51b0,<1",
+]
+
+[dependency-groups]
+dev = [
+    "django-stubs>=6.1.2",
+    "djangorestframework-stubs>=3.18.2",
+    "icalendar>=6,<8",
+    "mypy>=2.4.1",
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "ruff>=0.17.3",
+    "types-openpyxl>=3.1,<4",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"  # softwarden.settings in development mode (tests/settings.py)
+testpaths = ["tests"]
+markers = [
+    "otel: needs the optional `otel` extra; CI's api job deselects these (-m \"not otel\") and the image job's WITH_OTEL=1 leg runs them",
+    "live: calls a real Microsoft tenant; skipped unless pytest runs with --live and SOFTWARDEN_LIVE_TENANT_ID, SOFTWARDEN_LIVE_CLIENT_ID and SOFTWARDEN_LIVE_CLIENT_SECRET are set (docs/DEVELOPMENT.md, Live tests)",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["migrations"]  # every app's migrations
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S"]
+ignore = [
+    "S101",   # assert is how pytest checks
+    "E501",   # ruff format owns line length
+    "DJ008",  # models are shown through the API, not str()
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]  # synthetic test passwords
+"*/management/commands/*" = ["S105", "S106", "S311"]  # synthetic seed passwords and non-crypto randomness
+"catalog/search.py" = ["S608"]  # SQL built from fixed fragments only; every value is a bound parameter
+"money/search.py" = ["S608"]  # the same, for contracts
+"catalog/quality.py" = ["S608", "S611"]  # compiled rule SQL and fixed fragments; every value is a bound parameter
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+exclude = ["(^|/)migrations/"]
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["django_filters", "django_filters.*"]  # ships no type hints and has no maintained stubs
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["ee", "ee.*"]  # the optional SAML and SCIM package, not part of this repository (softwarden/ee.py)
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["opentelemetry", "opentelemetry.*"]  # the optional `otel` extra, not installed in the dev environment
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"  # the same, so mypy can load Django without a secret key

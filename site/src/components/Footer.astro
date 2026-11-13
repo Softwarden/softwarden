@@ -1,0 +1,144 @@
+---
+import Logo from './Logo.astro';
+import { siteConfig, githubUrl } from '../site.config';
+import { signupVisible } from '../lib/signup';
+
+const columns = [
+  {
+    title: 'Product',
+    links: [
+      { href: '/#features', label: 'Features' },
+      { href: '/#map', label: 'Dependency map' },
+      { href: '/#editions', label: 'Editions' },
+      { href: '/changelog/', label: 'Changelog' },
+      ...(signupVisible ? [{ href: '/#updates', label: 'Release emails' }] : []),
+    ],
+  },
+  {
+    title: 'Docs',
+    links: [
+      { href: '/docs/install/', label: 'Install' },
+      { href: '/docs/first-run/', label: 'First run' },
+      { href: '/docs/api/', label: 'REST API' },
+      { href: '/docs/permissions/', label: 'Microsoft permissions' },
+      { href: '/docs/backup/', label: 'Back up and restore' },
+    ],
+  },
+  {
+    title: 'Project',
+    links: [
+      ...(siteConfig.githubPublic
+        ? [
+            { href: siteConfig.repo, label: 'Source on GitHub' },
+            { href: githubUrl('SECURITY.md'), label: 'Security policy' },
+          ]
+        : []),
+      { href: 'https://www.apache.org/licenses/LICENSE-2.0', label: 'Apache License 2.0' },
+      ...(siteConfig.contactEmail ? [{ href: `mailto:${siteConfig.contactEmail}`, label: siteConfig.contactEmail }] : []),
+    ],
+  },
+];
+---
+<footer class="site-footer">
+  <div class="wrap grid">
+    <div class="about">
+      <a class="brand" href="/">
+        <Logo size={24} />
+        <span>softwarden</span>
+      </a>
+      <p class="muted small">
+        The open-source system of record for the software, SaaS, integrations and AI agents an IT team runs. Self-hosted.
+      </p>
+    </div>
+    {
+      columns.map((c) => (
+        <nav aria-label={`Footer: ${c.title}`}>
+          <h2>{c.title}</h2>
+          <ul>
+            {c.links.map((l) => (
+              <li>
+                <a href={l.href}>{l.label}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ))
+    }
+  </div>
+  <div class="wrap legal">
+    <p>Softwarden {siteConfig.version}. Released under the Apache License 2.0.</p>
+    <p>This site sets no cookies and runs no analytics.</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    border-top: 1px solid var(--border);
+    background: var(--card);
+    padding-top: 48px;
+    font-size: 14px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+    gap: 32px;
+  }
+  .about {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    max-width: 34ch;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-strong);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: -0.035em;
+  }
+  h2 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0;
+    margin-bottom: 10px;
+  }
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+  }
+  ul a {
+    display: inline-block;
+    padding-block: 5px;
+    color: var(--muted-foreground);
+    text-decoration: none;
+  }
+  ul a:hover {
+    color: var(--foreground);
+    text-decoration: underline;
+  }
+  .legal {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px 24px;
+    margin-top: 40px;
+    padding-block: 20px 28px;
+    border-top: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 13px;
+  }
+  @media (max-width: 760px) {
+    .grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .about {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

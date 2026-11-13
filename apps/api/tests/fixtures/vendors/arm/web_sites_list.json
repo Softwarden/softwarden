@@ -1,0 +1,188 @@
+{
+  "value": [
+    {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/test-rg/providers/Microsoft.Web/sites/sitef6141",
+      "name": "sitef6141",
+      "type": "Microsoft.Web/sites",
+      "kind": "app",
+      "location": "East US",
+      "properties": {
+        "state": "Running",
+        "hostNames": [
+          "sitef6141.azurewebsites.net"
+        ],
+        "repositorySiteName": "sitef6141",
+        "usageState": "Normal",
+        "enabled": true,
+        "enabledHostNames": [
+          "sitef6141.azurewebsites.net",
+          "sitef6141.scm.azurewebsites.net"
+        ],
+        "availabilityState": "Normal",
+        "hostNameSslStates": [
+          {
+            "name": "sitef6141.azurewebsites.net",
+            "sslState": "Disabled",
+            "hostType": "Standard"
+          },
+          {
+            "name": "sitef6141.scm.azurewebsites.net",
+            "sslState": "Disabled",
+            "hostType": "Repository"
+          }
+        ],
+        "serverFarmId": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/test-rg/providers/Microsoft.Web/serverfarms/DefaultAsp",
+        "reserved": false,
+        "isXenon": false,
+        "hyperV": false,
+        "lastModifiedTimeUtc": "2020-03-04T17:33:11.641Z",
+        "siteConfig": {
+          "numberOfWorkers": 1,
+          "netFrameworkVersion": "v4.0",
+          "linuxFxVersion": "",
+          "alwaysOn": false,
+          "http20Enabled": false,
+          "minTlsVersion": "1.2",
+          "ftpsState": "AllAllowed",
+          "azureStorageAccounts": {}
+        },
+        "clientAffinityEnabled": true,
+        "clientCertEnabled": false,
+        "hostNamesDisabled": false,
+        "customDomainVerificationId": "0000000000000000000000000000000000000000000000000000000000000000",
+        "outboundIpAddresses": "192.0.2.1,192.0.2.2",
+        "possibleOutboundIpAddresses": "192.0.2.1,192.0.2.2,192.0.2.3",
+        "containerSize": 0,
+        "dailyMemoryTimeQuota": 0,
+        "resourceGroup": "test-rg",
+        "defaultHostName": "sitef6141.azurewebsites.net",
+        "httpsOnly": false,
+        "redundancyMode": "None",
+        "storageAccountRequired": false
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/test-rg/providers/Microsoft.Web/sites/func-sample",
+      "name": "func-sample",
+      "type": "Microsoft.Web/sites",
+      "kind": "functionapp,linux",
+      "location": "East US",
+      "properties": {
+        "state": "Running",
+        "hostNames": [
+          "func-sample.azurewebsites.net"
+        ],
+        "repositorySiteName": "sitef6141",
+        "usageState": "Normal",
+        "enabled": true,
+        "enabledHostNames": [
+          "sitef6141.azurewebsites.net",
+          "sitef6141.scm.azurewebsites.net"
+        ],
+        "availabilityState": "Normal",
+        "hostNameSslStates": [
+          {
+            "name": "sitef6141.azurewebsites.net",
+            "sslState": "Disabled",
+            "hostType": "Standard"
+          },
+          {
+            "name": "sitef6141.scm.azurewebsites.net",
+            "sslState": "Disabled",
+            "hostType": "Repository"
+          }
+        ],
+        "serverFarmId": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/test-rg/providers/Microsoft.Web/serverfarms/DefaultAsp",
+        "reserved": false,
+        "isXenon": false,
+        "hyperV": false,
+        "lastModifiedTimeUtc": "2020-03-04T17:33:11.641Z",
+        "siteConfig": {
+          "numberOfWorkers": 1,
+          "netFrameworkVersion": "v4.0",
+          "linuxFxVersion": "",
+          "alwaysOn": false,
+          "http20Enabled": false,
+          "minTlsVersion": "1.2",
+          "ftpsState": "AllAllowed",
+          "azureStorageAccounts": {}
+        },
+        "clientAffinityEnabled": true,
+        "clientCertEnabled": false,
+        "hostNamesDisabled": false,
+        "customDomainVerificationId": "0000000000000000000000000000000000000000000000000000000000000000",
+        "outboundIpAddresses": "192.0.2.1,192.0.2.2",
+        "possibleOutboundIpAddresses": "192.0.2.1,192.0.2.2,192.0.2.3",
+        "containerSize": 0,
+        "dailyMemoryTimeQuota": 0,
+        "resourceGroup": "test-rg",
+        "defaultHostName": "func-sample.azurewebsites.net",
+        "httpsOnly": false,
+        "redundancyMode": "None",
+        "storageAccountRequired": false
+      }
+    },
+    {
+      "id": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/test-rg/providers/Microsoft.Web/sites/std-logic",
+      "name": "std-logic",
+      "type": "Microsoft.Web/sites",
+      "kind": "functionapp,workflowapp",
+      "location": "East US",
+      "properties": {
+        "state": "Running",
+        "hostNames": [
+          "std-logic.azurewebsites.net"
+        ],
+        "repositorySiteName": "sitef6141",
+        "usageState": "Normal",
+        "enabled": true,
+        "enabledHostNames": [
+          "sitef6141.azurewebsites.net",
+          "sitef6141.scm.azurewebsites.net"
+        ],
+        "availabilityState": "Normal",
+        "hostNameSslStates": [
+          {
+            "name": "sitef6141.azurewebsites.net",
+            "sslState": "Disabled",
+            "hostType": "Standard"
+          },
+          {
+            "name": "sitef6141.scm.azurewebsites.net",
+            "sslState": "Disabled",
+            "hostType": "Repository"
+          }
+        ],
+        "serverFarmId": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/test-rg/providers/Microsoft.Web/serverfarms/DefaultAsp",
+        "reserved": false,
+        "isXenon": false,
+        "hyperV": false,
+        "lastModifiedTimeUtc": "2020-03-04T17:33:11.641Z",
+        "siteConfig": {
+          "numberOfWorkers": 1,
+          "netFrameworkVersion": "v4.0",
+          "linuxFxVersion": "",
+          "alwaysOn": false,
+          "http20Enabled": false,
+          "minTlsVersion": "1.2",
+          "ftpsState": "AllAllowed",
+          "azureStorageAccounts": {}
+        },
+        "clientAffinityEnabled": true,
+        "clientCertEnabled": false,
+        "hostNamesDisabled": false,
+        "customDomainVerificationId": "0000000000000000000000000000000000000000000000000000000000000000",
+        "outboundIpAddresses": "192.0.2.1,192.0.2.2",
+        "possibleOutboundIpAddresses": "192.0.2.1,192.0.2.2,192.0.2.3",
+        "containerSize": 0,
+        "dailyMemoryTimeQuota": 0,
+        "resourceGroup": "test-rg",
+        "defaultHostName": "std-logic.azurewebsites.net",
+        "httpsOnly": false,
+        "redundancyMode": "None",
+        "storageAccountRequired": false
+      }
+    }
+  ],
+  "nextLink": "https://management.azure.com/subscriptions/00000000-0000-0000-0000-000000003001/providers/Microsoft.Web/sites?api-version=2024-04-01&$skiptoken=00000000"
+}

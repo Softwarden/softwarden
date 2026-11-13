@@ -1,0 +1,475 @@
+---
+import { NODES, DEPENDENCIES, FLOWS, NODE_W, NODE_H, VIEW_W, VIEW_H, impactOf, stepsText } from '../data/graph';
+import { renderImpact, dependentCount, allLinksInWords, arrowFor, LOOP_LABELS } from '../data/graph-text';
+
+const INITIAL = 'workday' as const;
+const imp = impactOf(INITIAL);
+const pathD = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]} ${p[1]}`).join(' ');
+const poly = (pts: [number, number][]) => pts.map((p) => p.join(',')).join(' ');
+
+const nodeState = (id: string) => {
+  if (id === imp.selected) return { cls: 'is-selected', sub: '● Selected' };
+  const a = imp.affected.find((x) => x.id === id);
+  if (a) return { cls: 'is-affected', sub: `◐ Affected, ${stepsText(a.steps)}` };
+  return { cls: '', sub: NODES.find((n) => n.id === id)!.kind };
+};
+const involvedFlow = (f: (typeof FLOWS)[number]) => f.from === imp.selected || f.to === imp.selected;
+const edgeCls = (id: string) =>
+  imp.treeEdges.includes(id) ? 'is-tree' : imp.loopEdges.includes(id) ? 'is-loop' : 'is-dim';
+---
+<div class="depmap" data-depmap data-initial={INITIAL}>
+  <figure class="map-figure">
+    <div class="map-bar">
+      <span><strong>Dependency map</strong> <span class="muted">Contoso demo data</span></span>
+      <span class="muted map-hint" data-map-hint>Hover a record, or choose one in the list.</span>
+    </div>
+    <div class="map-scroll" tabindex="0" role="region" aria-label="Dependency map picture">
+      <div class="map-frame" data-map-frame>
+        <svg
+          class="map-svg"
+          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+          role="img"
+          aria-labelledby="map-svg-title"
+          data-map-svg
+        >
+          <title id="map-svg-title">
+            Dependency map of the Contoso demo. Nightly Payroll Export depends on Workday HR, Finance Ledger on the export,
+            Executive Dashboard on Finance Ledger, and Finance Ledger and Budget Planner on each other. Workday HR also sends
+            data to Finance Ledger and to Zoom Meetings. The list beside the map describes the same records and links.
+          </title>
+          <defs>
+            <pattern id="map-dots" width="16" height="16" patternUnits="userSpaceOnUse">
+              <circle cx="1.5" cy="1.5" r="1" class="dot"></circle>
+            </pattern>
+          </defs>
+          <rect width={VIEW_W} height={VIEW_H} fill="url(#map-dots)"></rect>
+          <g class="edges">
+            {
+              FLOWS.map((f) => {
+                const a = arrowFor(f.points);
+                return (
+                  <g class:list={['edge', 'e-flow', involvedFlow(f) ? 'is-flow-on' : 'is-dim']} data-edge={f.id}>
+                    <path d={pathD(a.trimmed)} />
+                    <polygon points={poly(a.head)} />
+                    <text x={f.labelAt[0]} y={f.labelAt[1]} text-anchor={f.id === 'f1' ? 'middle' : 'start'}>
+                      {f.short}
+                    </text>
+                  </g>
+                );
+              })
+            }
+            {
+              DEPENDENCIES.map((d) => {
+                const a = arrowFor(d.points);
+                return (
+                  <g class:list={['edge', 'e-dep', edgeCls(d.id)]} data-edge={d.id}>
+                    <path d={pathD(a.trimmed)} />
+                    <polygon points={poly(a.head)} />
+                  </g>
+                );
+              })
+            }
+            {
+              Object.entries(LOOP_LABELS).map(([id, l]) => (
+                <text
+                  class="loop-label"
+                  data-loop-label={id}
+                  x={l.x}
+                  y={l.y}
+                  text-anchor={l.anchor}
+                  visibility={imp.loopEdges.includes(id) ? 'visible' : 'hidden'}
+                >
+                  ↻ Closes a loop
+                </text>
+              ))
+            }
+          </g>
+          <g class="nodes">
+            {
+              NODES.map((n) => {
+                const s = nodeState(n.id);
+                return (
+                  <g class:list={['node', s.cls, !s.cls && 'is-dim']} data-node={n.id} transform={`translate(${n.x} ${n.y})`}>
+                    <rect width={NODE_W} height={NODE_H} rx="6" />
+                    <text class="n-name" x="12" y="25">{n.name}</text>
+                    <text class="n-sub" x="12" y="44">{s.sub}</text>
+                  </g>
+                );
+              })
+            }
+          </g>
+        </svg>
+      </div>
+    </div>
+    <figcaption class="legend">
+      <span>
+        <svg viewBox="0 0 40 10" aria-hidden="true"><path d="M1 5h30" class="lg-dep"></path><path d="m39 5-8-4v8z" class="lg-dep-head"></path></svg>
+        Depends on: the arrow points at the record that depends
+      </span>
+      <span>
+        <svg viewBox="0 0 40 10" aria-hidden="true"><path d="M1 5h38" class="lg-flow"></path></svg>
+        Data flow, not an operational dependency
+      </span>
+      <span>
+        <svg viewBox="0 0 40 10" aria-hidden="true"><path d="M1 5h38" class="lg-loop"></path></svg>
+        Closes a loop: marked, not followed again
+      </span>
+    </figcaption>
+  </figure>
+
+  <div class="map-side">
+    <h3 class="side-title" id="map-records">Records in this map</h3>
+    <ul class="records" aria-labelledby="map-records">
+      {
+        NODES.map((n) => {
+          const c = dependentCount(n.id);
+          return (
+            <li>
+              <button type="button" data-select={n.id} aria-pressed={n.id === INITIAL ? 'true' : 'false'} aria-controls="map-impact">
+                <span class="r-name">{n.name}</span>
+                <span class="r-meta">
+                  {n.kind}. {c === 0 ? 'Nothing depends on it' : `${c} ${c === 1 ? 'record depends' : 'records depend'} on it`}
+                </span>
+              </button>
+            </li>
+          );
+        })
+      }
+    </ul>
+    <div class="impact" id="map-impact" data-impact set:html={renderImpact(INITIAL)} />
+    <details class="words">
+      <summary>Every link in words</summary>
+      <ul>
+        {allLinksInWords().map((l) => <li>{l}</li>)}
+      </ul>
+    </details>
+  </div>
+</div>
+
+<script>
+  import { mountDepMap } from '../scripts/depmap';
+  document.querySelectorAll<HTMLElement>('[data-depmap]').forEach((el) => mountDepMap(el));
+</script>
+
+<style>
+  .depmap {
+    display: grid;
+    gap: 20px;
+    margin-top: 36px;
+  }
+  .map-figure {
+    margin: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-width: 0;
+  }
+  .map-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .map-bar strong {
+    color: var(--text-strong);
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .map-scroll {
+    overflow-x: auto;
+  }
+  .map-frame {
+    position: relative;
+    max-width: 1000px;
+    margin-inline: auto;
+    min-width: 600px;
+    aspect-ratio: 840 / 340;
+  }
+  .map-frame :global(canvas) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .map-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    font-family: var(--font-sans);
+  }
+  .map-frame[data-mode='3d'] .map-svg {
+    display: none;
+  }
+  .dot {
+    fill: var(--border);
+  }
+  /* Edges */
+  .edge path {
+    fill: none;
+    stroke-width: 1.6;
+    transition: stroke var(--duration-base) var(--ease), opacity var(--duration-base) var(--ease);
+  }
+  .edge polygon {
+    transition: fill var(--duration-base) var(--ease), opacity var(--duration-base) var(--ease);
+  }
+  .e-dep path {
+    stroke: var(--graph-line);
+  }
+  .e-dep polygon {
+    fill: var(--graph-line);
+  }
+  .e-dep.is-tree path {
+    stroke: var(--accent-line);
+    stroke-width: 2.4;
+  }
+  .e-dep.is-tree polygon {
+    fill: var(--accent-line);
+  }
+  .e-dep.is-loop path {
+    stroke: var(--chart-2);
+    stroke-width: 2;
+    stroke-dasharray: 8 4 2 4;
+  }
+  .e-dep.is-loop polygon {
+    fill: var(--chart-2);
+  }
+  .e-flow path {
+    stroke: var(--accent-line);
+    stroke-dasharray: 6 5;
+  }
+  .e-flow polygon {
+    fill: var(--accent-line);
+  }
+  .e-flow text {
+    fill: var(--muted-foreground);
+    font-size: 12px;
+  }
+  .edge.is-dim {
+    opacity: 0.45;
+  }
+  .loop-label {
+    fill: var(--muted-foreground);
+    font-size: 12px;
+  }
+  /* Nodes */
+  .node {
+    cursor: pointer;
+    transition: opacity var(--duration-base) var(--ease);
+  }
+  .node rect {
+    fill: var(--card);
+    stroke: var(--border-strong);
+    stroke-width: 1;
+    transition: fill var(--duration-base) var(--ease), stroke var(--duration-base) var(--ease);
+  }
+  .n-name {
+    fill: var(--text-strong);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .n-sub {
+    fill: var(--muted-foreground);
+    font-size: 12.5px;
+  }
+  .node.is-selected rect {
+    fill: var(--accent);
+    stroke: var(--accent-line);
+    stroke-width: 2;
+  }
+  .node.is-selected .n-sub {
+    fill: var(--accent-foreground);
+  }
+  .node.is-affected rect {
+    fill: var(--state-pending);
+    stroke: var(--state-pending-border);
+    stroke-width: 1.5;
+  }
+  .node.is-affected .n-sub {
+    fill: var(--state-pending-foreground);
+  }
+  .node.is-dim {
+    opacity: 0.6;
+  }
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .legend svg {
+    width: 40px;
+    height: 10px;
+    flex: none;
+  }
+  .lg-dep {
+    stroke: var(--graph-line);
+    stroke-width: 2;
+  }
+  .lg-dep-head {
+    fill: var(--graph-line);
+  }
+  .lg-flow {
+    stroke: var(--accent-line);
+    stroke-width: 2;
+    stroke-dasharray: 6 5;
+  }
+  .lg-loop {
+    stroke: var(--chart-2);
+    stroke-width: 2;
+    stroke-dasharray: 8 4 2 4;
+  }
+  /* Side: the complete text equivalent */
+  .map-side {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    grid-template-areas: 'title impact' 'records impact' 'words impact';
+    grid-template-rows: auto auto 1fr;
+    gap: 12px 24px;
+    align-items: start;
+    min-width: 0;
+  }
+  .side-title {
+    grid-area: title;
+  }
+  .records {
+    grid-area: records;
+  }
+  .impact {
+    grid-area: impact;
+  }
+  .words {
+    grid-area: words;
+  }
+  .side-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  .records {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    overflow: hidden;
+  }
+  .records li + li {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .records button {
+    display: grid;
+    gap: 1px;
+    width: 100%;
+    padding: 9px 14px;
+    border: 0;
+    background: transparent;
+    color: var(--foreground);
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    transition: background-color var(--duration-fast) var(--ease);
+  }
+  .records button:hover {
+    background: var(--row-hover);
+  }
+  .records button:focus-visible {
+    outline-offset: -2px;
+  }
+  .records button[aria-pressed='true'] {
+    background: var(--row-selected);
+    box-shadow: inset 3px 0 0 var(--accent-line);
+  }
+  .r-name {
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--text-strong);
+  }
+  .r-meta {
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .impact {
+    display: grid;
+    gap: 10px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    font-size: 14px;
+  }
+  .impact :global(.impact-title) {
+    font-size: 16px;
+    color: var(--text-strong);
+  }
+  .impact :global(.impact-sum),
+  .impact :global(.impact-foot) {
+    color: var(--muted-foreground);
+  }
+  .impact :global(.impact-sub) {
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-top: 4px;
+  }
+  .impact :global(ol),
+  .impact :global(ul) {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+  .impact :global(ol li) {
+    display: grid;
+    gap: 2px;
+    padding-left: 12px;
+    border-left: 2px solid var(--state-pending-border);
+  }
+  .impact :global(.impact-name) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+  }
+  .impact :global(.impact-via) {
+    color: var(--muted-foreground);
+    font-size: 13px;
+  }
+  .words {
+    font-size: 14px;
+  }
+  .words summary {
+    cursor: pointer;
+    color: var(--link);
+    font-weight: 500;
+    padding-block: 4px;
+  }
+  .words ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    color: var(--muted-foreground);
+    display: grid;
+    gap: 6px;
+  }
+  @media (max-width: 760px) {
+    .map-side {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: 'title' 'records' 'impact' 'words';
+      grid-template-rows: none;
+    }
+  }
+</style>

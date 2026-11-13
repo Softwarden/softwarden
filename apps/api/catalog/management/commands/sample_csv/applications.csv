@@ -1,0 +1,9 @@
+﻿softwarden_id,external_key,name,lifecycle,criticality,description,business_owner_email,business_owner_name,technical_owner_email,technical_owner_name,support_team,it_steward_email,purpose,vendor,built_by,license_model,documentation_url,support_url,tags
+,APP-0101,Expense Tracker,active,high,Staff expense claims and approvals.,lee.chen@example.test,,dana.ortiz@example.test,,IT Applications,,Expense claims.,Zylker Software,,,,,Finance
+,APP-0102,Vendor Portal,active,medium,Supplier onboarding and invoices.,lee.chen@example.test,,dana.ortiz@example.test,,Procurement,,Supplier self-service.,,,,,,Finance
+,APP-0103,Badge Access,active,medium,Building door access.,facilities.lead@example.test,Facilities Lead,dana.ortiz@example.test,,IT Applications,,Door access.,,,,,,
+,APP-0104,Intranet Wiki,active,low,Internal knowledge base.,priya.raman@example.test,,dana.ortiz@example.test,,Service Desk,,Internal documentation.,,,,,,Collaboration
+,APP-0105,Time Clock Kiosk,Live,low,"Lifecycle is not one of the allowed values, so this row is an error.",,,dana.ortiz@example.test,,IT Applications,,,,,,,,
+,APP-0106,Budget Planner,active,medium,"Same name as an existing record, so Softwarden asks whether to match it.",,,lee.chen@example.test,,IT Applications,,,,,,,,
+,APP-0107,Learning Portal,active,low,Staff training courses.,priya.raman@example.test,,dana.ortiz@example.test,,IT Applications,,Training.,,,,,,HR
+,APP-0108,Survey Tool,proposed,low,"Pulse surveys, not yet live.",priya.raman@example.test,,,,Service Desk,,Staff surveys.,,,,,,HR

@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "string",
+    "message": "string",
+    "innererror": {
+      "code": "string"
+    },
+    "details": []
+  }
+}

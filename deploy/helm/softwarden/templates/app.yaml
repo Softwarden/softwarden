@@ -1,0 +1,116 @@
+{{- /* The web/API (gunicorn), the image's own start command minus the migration, which the hook job runs first. */ -}}
+{{- include "softwarden.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "softwarden.fullname" . }}-app
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  {{- if not .Values.app.autoscaling.enabled }}
+  replicas: {{ .Values.app.replicas }}
+  {{- end }}
+  {{- if eq .Values.persistence.media.accessMode "ReadWriteOnce" }}
+  # One volume mounted on one node: replace the pod rather than run two side by side.
+  strategy: { type: Recreate }
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "softwarden.selector" (dict "root" . "component" "app") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "softwarden.labels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+      {{- with .Values.app.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      # The app never calls the Kubernetes API: no service account token in the pod.
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        {{- include "softwarden.secretsInit" . | nindent 8 }}
+      containers:
+        - name: app
+          image: {{ include "softwarden.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # While first-run setup is open, bootstrap_admin --prepare writes the one-time token (README).
+          command: ["sh", "-c", "python manage.py bootstrap_admin --prepare && exec gunicorn softwarden.wsgi"]
+          env:
+            {{- include "softwarden.env" . | nindent 12 }}
+            - name: SOFTWARDEN_WORKERS
+              value: {{ .Values.app.gunicornWorkers | quote }}
+            - name: SOFTWARDEN_THREADS
+              value: {{ .Values.app.gunicornThreads | default 8 | quote }}
+          ports:
+            - { name: http, containerPort: 8000 }
+          # The probes send Host: localhost, which SOFTWARDEN_ALLOWED_HOSTS always accepts (the pod IP isn't in it).
+          # Readiness is /readyz/web (database and migrations), as the image's healthcheck: /readyz also waits for the
+          # worker, which point an outside monitor at instead.
+          startupProbe:
+            httpGet: { path: /readyz/web, port: http, httpHeaders: [{ name: Host, value: localhost }] }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /readyz/web, port: http, httpHeaders: [{ name: Host, value: localhost }] }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http, httpHeaders: [{ name: Host, value: localhost }] }
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - { name: secrets, mountPath: /data/secrets, readOnly: true }
+            {{- include "softwarden.commonMounts" . | nindent 12 }}
+            - { name: bootstrap, mountPath: /data/bootstrap }
+            - { name: media, mountPath: /data/media }
+      volumes:
+        {{- include "softwarden.secretVolumes" . | nindent 8 }}
+        - name: bootstrap
+          emptyDir: { sizeLimit: 1Mi }
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ include "softwarden.mediaClaim" . }}
+      {{- with .Values.app.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- include "softwarden.spread" (dict "root" $ "component" "app" "constraints" .) | trim | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "softwarden.fullname" . }}-app
+  labels:
+    {{- include "softwarden.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "softwarden.selector" (dict "root" . "component" "app") | nindent 4 }}
+  ports:
+    - { name: http, port: {{ .Values.service.port }}, targetPort: http }

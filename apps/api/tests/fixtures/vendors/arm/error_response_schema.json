@@ -1,0 +1,22 @@
+{
+  "error": {
+    "code": "string",
+    "message": "string",
+    "target": "string",
+    "details": [
+      {
+        "code": "string",
+        "message": "string",
+        "target": "string",
+        "details": [],
+        "additionalInfo": []
+      }
+    ],
+    "additionalInfo": [
+      {
+        "type": "string",
+        "info": {}
+      }
+    ]
+  }
+}

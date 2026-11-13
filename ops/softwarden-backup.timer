@@ -1,0 +1,15 @@
+# Example systemd timer: the backup service nightly at about 02:30.
+#   sudo cp softwarden-backup.service softwarden-backup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now softwarden-backup.timer
+#   systemctl list-timers softwarden-backup
+[Unit]
+Description=Run the Softwarden backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15min
+# Run at the next boot if the host was off at 02:30.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

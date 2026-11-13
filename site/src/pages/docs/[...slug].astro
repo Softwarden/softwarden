@@ -1,0 +1,40 @@
+---
+import { getCollection } from 'astro:content';
+import Docs from '../../layouts/Docs.astro';
+import { DOCS, docBySlug, docUrl } from '../../lib/docs-manifest';
+import { applyRepoLinks } from '../../lib/repo-html';
+import { headingsOf } from '../../lib/headings';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('docs');
+  return entries.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const meta = docBySlug(entry.id)!;
+const headings = headingsOf(entry);
+const h1Of = (body?: string) => body?.match(/^#\s+(.+?)\s*$/m)?.[1].replace(/`/g, '');
+const title = meta.title ?? h1Of(entry.body) ?? meta.nav;
+const html = applyRepoLinks(entry.rendered?.html ?? '');
+
+const all = await getCollection('docs');
+const titleOf = (slug: string) => {
+  const e = all.find((x) => x.id === slug);
+  return docBySlug(slug)!.title ?? h1Of(e?.body) ?? docBySlug(slug)!.nav;
+};
+const i = DOCS.findIndex((d) => d.slug === meta.slug);
+const prevDoc = DOCS[i - 1];
+const nextDoc = DOCS[i + 1];
+---
+<Docs
+  title={title}
+  description={meta.description}
+  headings={headings}
+  currentSlug={meta.slug}
+  group={meta.group}
+  source={`docs/${meta.file}`}
+  prev={prevDoc ? { href: docUrl(prevDoc), title: titleOf(prevDoc.slug) } : undefined}
+  next={nextDoc ? { href: docUrl(nextDoc), title: titleOf(nextDoc.slug) } : { href: '/changelog/', title: 'Changelog' }}
+>
+  <Fragment set:html={html} />
+</Docs>

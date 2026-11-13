@@ -1,0 +1,15 @@
+* text=auto
+# Files that run inside Linux containers or on Linux hosts: keep LF whatever the checkout platform.
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+ops/*.example text eol=lf
+Caddyfile text eol=lf
+Dockerfile text eol=lf
+compose*.yaml text eol=lf
+# PowerShell 5.1 reads a BOM-less script as the ANSI code page; keep it CRLF and ASCII-only.
+*.ps1 text eol=crlf
+# Written by `npm run api:types` from the API schema: collapsed in diffs and left out of language stats.
+apps/web/src/generated/openapi.d.ts linguist-generated=true -diff
+# The PostgreSQL apt signing key (Dockerfile): byte-for-byte as published.
+docker/pgdg/*.asc text eol=lf

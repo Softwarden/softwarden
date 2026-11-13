@@ -1,0 +1,724 @@
+---
+import Base from '../layouts/Base.astro';
+import Queue from '../components/Queue.astro';
+import DepMap from '../components/DepMap.astro';
+import { siteConfig, githubUrl } from '../site.config';
+import { signupVisible, signupConfigured, signupAction } from '../lib/signup';
+
+const installCommands = [
+  `git clone ${siteConfig.repo}`,
+  'cd softwarden',
+  'docker compose up -d --build',
+  'docker compose exec app python manage.py bootstrap_admin',
+];
+
+const questions = [
+  {
+    q: 'What breaks if we change this?',
+    a: 'Dependencies to any depth, with loops marked and not followed twice. Save the affected set as a change assessment before an upgrade or a retirement; it says when its snapshot goes stale.',
+    where: 'Dependencies, Map, Change assessments',
+  },
+  {
+    q: 'What are we running that nobody registered?',
+    a: 'Discovery reads Microsoft Entra ID: enterprise applications, app registrations, their owners and expiring secrets, and the sign-in logs for shadow IT. Findings wait in a queue. You link, create or dismiss, and curated data is never overwritten.',
+    where: 'Discovery, Shadow IT',
+  },
+  {
+    q: 'Which AI agents do we have, and who signed off?',
+    a: 'A register of agents, providers and models. Each agent has owners, a data access scope and a human-in-loop decision. An agent without them shows up as a gap.',
+    where: 'AI agents, AI models',
+  },
+  {
+    q: 'What do we pay, and for how many seats?',
+    a: 'Contracts with lines split across the applications they cover, license pools with seats purchased and assigned, and renewals whose action deadline is worked out from the notice period. Each deadline says whether it was entered, calculated or assumed.',
+    where: 'Contracts, License pools, Renewals',
+  },
+  {
+    q: 'Is it still supported, and is the vendor still covered?',
+    a: 'End-of-life dates from endoflife.date for each version you run. A risk file per vendor: assurance reports, the DPA and subprocessors, with reminders before documents expire.',
+    where: 'End of life, Vendor risk',
+  },
+  {
+    q: 'Where does confidential data go?',
+    a: 'Integrations record the kinds of data they carry. The data-flow map flags personal data sent to a vendor with no signed DPA, flows with no authentication and flows classified above the record that receives them.',
+    where: 'Data flows',
+  },
+  {
+    q: 'What is missing from the catalog?',
+    a: 'Gaps are named, such as "No technical owner", and collected in one Needs attention queue. A daily digest goes out by email or Microsoft Teams.',
+    where: 'Needs attention, Data quality',
+  },
+  {
+    q: 'Who changed that, and when?',
+    a: 'Every write goes through one path and records an audit event with the before and after values. Each record has its own history.',
+    where: 'Audit log, History',
+  },
+];
+
+const alsoIncluded = [
+  { t: 'CSV import with a preview', d: 'Map your own columns, decide on possible matches, then commit everything or nothing.' },
+  { t: 'REST API and webhooks', d: 'An OpenAPI schema, read-only or read-write tokens, and signed webhooks with retries.' },
+  { t: 'MCP server', d: 'Lets an AI assistant read the catalog through the API with your token.' },
+  { t: 'Catalog as code', d: 'The catalog as YAML files in git. Plan and apply through the same checks as the app.' },
+  { t: 'Single sign-on', d: 'OpenID Connect per organization, set up as a draft, tested, then activated.' },
+  { t: 'Backups and checks', d: 'Nightly encrypted backups from the worker, a restore rehearsal and manage.py doctor.' },
+];
+
+const community = [
+  'Applications, components, integrations, AI agents, people, teams and vendors',
+  'Owners, reviews, Needs attention and the daily digest',
+  'Dependencies, change assessments and the data-flow map',
+  'Renewals, contracts and license pools',
+  'Microsoft Entra ID discovery, shadow IT, SSO and MFA coverage, license waste (API only in 1.0)',
+  'Discovery from Azure, Power Platform and HaloITSM',
+  'Vendor risk files and end-of-life tracking',
+  'Custom fields, attachments, saved views, bulk edit and data-quality rules',
+  'CSV import and export, catalog as code and a full organization export',
+  'OpenID Connect sign-in, API tokens, webhooks, the MCP server and the audit log',
+  'Ticket links on assessments and renewals, with Jira status refresh',
+  'Assistant suggestions for discovery candidates',
+  'The compliance profile (GxP fields)',
+  'Audit log export for a SIEM, as JSON lines',
+];
+
+const enterprise = [
+  'SAML 2.0 sign-in',
+  'SCIM 2.0 provisioning of users and groups',
+  'Support with a response-time commitment',
+  'A hosted option, run for you',
+];
+---
+<Base
+  description="Softwarden is an open-source, self-hosted system of record for the software, SaaS, integrations and AI agents an IT team runs. Owners, reviews, dependencies, renewals and named gaps."
+  current="home"
+>
+  <!-- Hero -->
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <h1 id="hero-title">An application catalog that stays true.</h1>
+      <p class="lede hero-lede">
+        Softwarden is the open-source system of record for the software, SaaS, integrations and AI agents your IT team
+        runs. Every record has an owner and a review date. What is missing shows up as a named gap you can act on.
+      </p>
+      <div class="cta-row">
+        <a class="btn" href="/docs/install/">Install with Docker Compose</a>
+        <a class="btn btn-outline" href="/docs/">Read the docs</a>
+        {siteConfig.githubPublic && <a class="btn btn-outline" href={siteConfig.repo}>Source on GitHub</a>}
+      </div>
+      <ul class="facts">
+        <li>Apache 2.0</li>
+        <li>Self-hosted with Docker Compose or Helm</li>
+        <li>No telemetry</li>
+      </ul>
+    </div>
+    <div class="hero-visual">
+      <Queue />
+      <p class="visual-note">The home screen. Each row says what is missing and what to do next.</p>
+    </div>
+  </section>
+
+  <!-- The three questions -->
+  <section id="features" class="band" aria-labelledby="three-q">
+    <div class="wrap section">
+      <div class="section-head">
+        <h2 id="three-q" class="three-q">
+          <span>What do we run?</span>
+          <span>Who owns it?</span>
+          <span>When does it renew?</span>
+        </h2>
+        <p class="lede">
+          The three questions every IT team gets asked. Softwarden keeps the answers in one place, and each record shows
+          when someone last confirmed them.
+        </p>
+      </div>
+
+      <div class="records-grid">
+        <article class="rec" aria-labelledby="rec1">
+          <h3 id="rec1" class="rec-q">What do we run?</h3>
+          <div class="rec-head">
+            <span class="kind kind-application">Application</span>
+            <p class="rec-name">Workday HR</p>
+          </div>
+          <dl>
+            <dt>Lifecycle</dt>
+            <dd><span class="chip confirmed"><span class="chip-glyph" aria-hidden="true">✓</span>Active</span></dd>
+            <dt>Criticality</dt>
+            <dd><span class="crit crit-critical"><span aria-hidden="true">◆</span>Critical</span></dd>
+            <dt>Needed by</dt>
+            <dd>4 records, at any depth</dd>
+            <dt>Data flows</dt>
+            <dd>2 out: Finance Ledger, Zoom Meetings</dd>
+            <dt>Found in</dt>
+            <dd>Entra ID, linked</dd>
+          </dl>
+        </article>
+
+        <article class="rec" aria-labelledby="rec2">
+          <h3 id="rec2" class="rec-q">Who owns it?</h3>
+          <div class="rec-head">
+            <span class="kind kind-application">Application</span>
+            <p class="rec-name">Employee Timesheets</p>
+          </div>
+          <dl>
+            <dt>Business owner</dt>
+            <dd>Priya Raman</dd>
+            <dt>Technical owner</dt>
+            <dd><span class="chip gap"><span class="chip-glyph" aria-hidden="true">⚠</span>No technical owner</span></dd>
+            <dt>Support team</dt>
+            <dd>IT Applications</dd>
+          </dl>
+          <p class="rec-note">The gap puts the record in Needs attention until someone fills it.</p>
+        </article>
+
+        <article class="rec" aria-labelledby="rec3">
+          <h3 id="rec3" class="rec-q">When does it renew?</h3>
+          <div class="rec-head">
+            <span class="kind kind-neutral">Renewal</span>
+            <p class="rec-name">Workday subscription</p>
+          </div>
+          <dl>
+            <dt>Renewal date</dt>
+            <dd>March 31</dd>
+            <dt>Notice period</dt>
+            <dd>2 months</dd>
+            <dt>Action deadline</dt>
+            <dd class="deadline">January 31 <span class="tag">Calculated</span></dd>
+          </dl>
+          <p class="rec-note">March 31 minus the two-month notice period. Entered and assumed deadlines are labelled the same way.</p>
+        </article>
+      </div>
+      <p class="demo-note muted small">Records from the Contoso demo organization that ships with the seed data.</p>
+    </div>
+  </section>
+
+  <!-- The questions that come next -->
+  <section class="wrap section" aria-labelledby="next-q">
+    <div class="section-head">
+      <h2 id="next-q">And the questions that come next</h2>
+      <p class="lede">Each answer is a screen in the app, with its filters in the URL so a link shows the same view.</p>
+    </div>
+    <div class="qa">
+      {
+        questions.map((item) => (
+          <div class="qa-row">
+            <h3>{item.q}</h3>
+            <div>
+              <p>{item.a}</p>
+              <p class="qa-where">{item.where}</p>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+
+    <h3 class="also-title">Also in 1.0</h3>
+    <ul class="also">
+      {
+        alsoIncluded.map((x) => (
+          <li>
+            <strong>{x.t}</strong>
+            <span>{x.d}</span>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <!-- Dependency map -->
+  <section id="map" class="band" aria-labelledby="map-title">
+    <div class="wrap section">
+      <div class="section-head">
+        <h2 id="map-title">What breaks if Workday HR changes?</h2>
+        <p class="lede">
+          The payroll chain from the demo data. Choose a record to see everything that depends on it, at any depth. A link
+          that leads back to a record already on the path closes a loop: it is marked and not followed again. Data flows
+          are drawn apart, since moving data is not an operational dependency.
+        </p>
+      </div>
+      <DepMap />
+    </div>
+  </section>
+
+  <!-- Install -->
+  <section id="install" class="wrap section" aria-labelledby="install-title">
+    <div class="install">
+      <div class="install-copy">
+        <h2 id="install-title" class="h2">Running in a few minutes</h2>
+        <p class="lede">
+          One Compose file brings up the app, the worker, PostgreSQL 17 and Caddy. Secrets are generated on first start,
+          so there is no settings file to write. The install guide takes a fresh Ubuntu VM to a signed-in Admin with
+          backups running.
+        </p>
+        {!siteConfig.githubPublic && (
+          <p class="note">The repository opens to the public with the 1.0 release. Until then the clone command needs access.</p>
+        )}
+        <dl class="reqs">
+          <div><dt>Server</dt><dd>2 vCPU, 4 GB RAM, 20 GB disk</dd></div>
+          <div><dt>Software</dt><dd>Docker Engine with Compose</dd></div>
+          <div><dt>Network</dt><dd>A DNS name and ports 80 and 443</dd></div>
+        </dl>
+        <div class="cta-row">
+          <a class="btn" href="/docs/install/">Install guide</a>
+          <a class="btn btn-outline" href="/docs/first-run/">Set up discovery</a>
+          {siteConfig.githubPublic && (
+            <a class="btn btn-outline" href={githubUrl('deploy/helm/softwarden/README.md')}>Helm chart</a>
+          )}
+        </div>
+      </div>
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span>Terminal</span>
+          <button type="button" class="copy-btn" data-copy-text={installCommands.join('\n')} hidden>
+            <span data-copy-label>Copy</span><span class="visually-hidden"> the install commands</span>
+          </button>
+        </div>
+        <pre><code><span class="c"># the full stack at https://localhost</span>
+{installCommands.slice(0, 3).map((c) => <><span class="p">$ </span>{c}{'\n'}</>)}<span class="c"># prints the setup address and a one-time token</span>
+<span class="p">$ </span>{installCommands[3]}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Editions -->
+  <section id="editions" class="band" aria-labelledby="editions-title">
+    <div class="wrap section">
+      <div class="section-head">
+        <h2 id="editions-title">Editions</h2>
+        <p class="lede">Everything in 1.0 is in the community edition. It is free, and the code is yours to run and change.</p>
+      </div>
+      <div class="editions">
+        <article class="edition" aria-labelledby="ed-community">
+          <div class="ed-head">
+            <h3 id="ed-community">Community</h3>
+            <p class="muted">Free and open source, Apache 2.0</p>
+          </div>
+          <ul class="ed-list">
+            {community.map((c) => <li>{c}</li>)}
+          </ul>
+          <div class="cta-row">
+            <a class="btn" href="/docs/install/">Install</a>
+            <a class="btn btn-outline" href="/docs/capabilities/">Every capability</a>
+          </div>
+        </article>
+        <article class="edition soon" aria-labelledby="ed-enterprise">
+          <div class="ed-head">
+            <h3 id="ed-enterprise">
+              Enterprise
+              <span class="chip neutral"><span class="chip-glyph" aria-hidden="true">◔</span>Coming soon</span>
+            </h3>
+            <p class="muted">For larger teams and stricter environments</p>
+          </div>
+          <ul class="ed-list">
+            {enterprise.map((c) => <li>{c}</li>)}
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- Release emails -->
+  {
+    signupVisible && (
+      <section id="updates" class="wrap section signup-section" aria-labelledby="updates-title">
+        <div class="signup-grid">
+          <div class="section-head">
+            <h2 id="updates-title">Release emails</h2>
+            <p class="lede">One email per release, with what changed and how to upgrade. Nothing else.</p>
+          </div>
+          <div>
+            <form class="signup" method="post" action={signupAction || undefined}>
+              <label for="signup-email">Email address</label>
+              <div class="signup-row">
+                <input id="signup-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" disabled={!signupConfigured} />
+                <button class="btn" type="submit" disabled={!signupConfigured}>Get release emails</button>
+              </div>
+            </form>
+            {signupConfigured ? (
+              <p class="note muted small">The list is kept by Buttondown. You confirm the address on their page, and every email has an unsubscribe link.</p>
+            ) : (
+              <p class="note not-configured small">
+                Not configured: set signup.buttondownUser in src/site.config.ts. Production builds leave this section out until then.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+    )
+  }
+</Base>
+
+<script>
+  import { enhanceCopyButtons } from '../scripts/copy';
+  enhanceCopyButtons();
+</script>
+
+<style>
+  /* Hero */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(32px, 5vw, 64px);
+    align-items: center;
+    padding-block: clamp(40px, 7vw, 88px) clamp(56px, 8vw, 104px);
+  }
+  .hero-copy {
+    display: grid;
+    gap: 24px;
+  }
+  .hero h1 {
+    font-size: clamp(38px, 5.2vw, 60px);
+    line-height: 1.03;
+    letter-spacing: -0.032em;
+    font-weight: 700;
+  }
+  .hero-lede {
+    font-size: clamp(17px, 1.5vw, 19px);
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+    color: var(--muted-foreground);
+  }
+  .facts li {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .facts li::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    background: var(--border-strong);
+  }
+  .hero-visual {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+  }
+  .visual-note {
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+
+  /* Three questions */
+  .three-q {
+    font-size: clamp(30px, 4vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -0.028em;
+  }
+  .three-q span {
+    display: block;
+  }
+  .records-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: 44px;
+  }
+  .rec {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    background: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    min-width: 0;
+  }
+  .rec-q {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--muted-foreground);
+    letter-spacing: 0;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .rec-head {
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+  .rec-name {
+    font-size: 21px;
+    font-weight: 650;
+    color: var(--text-strong);
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+  }
+  .kind-neutral {
+    background: var(--secondary);
+    color: var(--muted-foreground);
+  }
+  .rec dl {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 9px 16px;
+    margin: 0;
+    font-size: 14px;
+    align-items: center;
+  }
+  .rec dt {
+    color: var(--muted-foreground);
+  }
+  .rec dd {
+    margin: 0;
+    min-width: 0;
+  }
+  .deadline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+  }
+  .tag {
+    display: inline-flex;
+    padding: 1px 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+  }
+  .rec-note {
+    font-size: 13px;
+    color: var(--muted-foreground);
+    border-top: 1px dashed var(--border);
+    padding-top: 12px;
+  }
+  .demo-note {
+    margin-top: 16px;
+  }
+
+  /* Q and A */
+  .qa {
+    margin-top: 40px;
+    border-top: 1px solid var(--border-strong);
+  }
+  .qa-row {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 10px 48px;
+    padding-block: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .qa-row h3 {
+    font-size: clamp(18px, 1.8vw, 21px);
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  .qa-row p {
+    color: var(--foreground);
+    max-width: 62ch;
+  }
+  .qa-row .qa-where {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .also-title {
+    margin-top: 56px;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .also {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 32px;
+  }
+  .also li {
+    display: grid;
+    gap: 4px;
+    padding-block: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 14.5px;
+  }
+  .also strong {
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+  .also span {
+    color: var(--muted-foreground);
+  }
+
+  /* Install */
+  .install {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(32px, 5vw, 64px);
+    align-items: center;
+  }
+  .install-copy {
+    display: grid;
+    gap: 20px;
+  }
+  .reqs {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    border-top: 1px solid var(--border);
+    font-size: 14.5px;
+  }
+  .reqs div {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 12px;
+    padding-block: 9px;
+    border-bottom: 1px solid var(--border);
+  }
+  .reqs dt {
+    color: var(--muted-foreground);
+  }
+  .reqs dd {
+    margin: 0;
+  }
+
+  /* Editions */
+  .editions {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: 20px;
+    margin-top: 40px;
+    align-items: stretch;
+  }
+  .edition {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 20px;
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    min-width: 0;
+  }
+  .edition.soon {
+    border-style: dashed;
+    border-color: var(--border-strong);
+    background: transparent;
+    grid-template-rows: auto 1fr;
+  }
+  .ed-head {
+    display: grid;
+    gap: 4px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ed-head h3 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-size: 22px;
+  }
+  .ed-head p {
+    font-size: 15px;
+  }
+  .ed-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+    font-size: 15px;
+    align-content: start;
+  }
+  .ed-list li {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .ed-list li::before {
+    content: '✓';
+    color: var(--state-confirmed-foreground);
+    font-weight: 600;
+  }
+  .soon .ed-list li::before {
+    content: '◔';
+    color: var(--muted-foreground);
+  }
+
+  /* Signup */
+  .signup-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 32px;
+    align-items: end;
+  }
+  .signup {
+    display: grid;
+    gap: 8px;
+  }
+  .signup label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .signup-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .signup input {
+    flex: 1 1 220px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid var(--input);
+    border-radius: var(--radius-md);
+    background: var(--card);
+    color: var(--foreground);
+    font: 16px var(--font-sans);
+  }
+  .signup input:disabled,
+  .signup button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .note {
+    margin-top: 10px;
+  }
+  .not-configured {
+    color: var(--state-pending-foreground);
+    background: var(--state-pending);
+    border: 1px dashed var(--state-pending-border);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+  }
+
+  @media (max-width: 960px) {
+    .hero,
+    .install,
+    .editions,
+    .signup-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .records-grid {
+      grid-template-columns: minmax(0, 1fr);
+      max-width: 560px;
+    }
+    .also {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 720px) {
+    .qa-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .also {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .edition {
+      padding: 20px;
+    }
+  }
+</style>

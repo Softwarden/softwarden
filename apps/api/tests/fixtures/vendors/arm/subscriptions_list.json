@@ -1,0 +1,52 @@
+{
+  "nextLink": "https://management.azure.com/subscriptions?api-version=2022-12-01&$skiptoken=00000000",
+  "value": [
+    {
+      "authorizationSource": "RoleBased",
+      "displayName": "Example Subscription",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000003001",
+      "managedByTenants": [
+        {
+          "tenantId": "00000000-0000-0000-0000-000000003101"
+        }
+      ],
+      "state": "Enabled",
+      "subscriptionId": "00000000-0000-0000-0000-000000003001",
+      "subscriptionPolicies": {
+        "locationPlacementId": "Internal_2014-09-01",
+        "quotaId": "Internal_2014-09-01",
+        "spendingLimit": "Off"
+      },
+      "tags": {
+        "tagKey1": "tagValue1",
+        "tagKey2": "tagValue2"
+      },
+      "tenantId": "00000000-0000-0000-0000-0000000000a0"
+    },
+    {
+      "authorizationSource": "RoleBased",
+      "displayName": "Example Subscription2",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000003002",
+      "managedByTenants": [
+        {
+          "tenantId": "00000000-0000-0000-0000-000000003101"
+        },
+        {
+          "tenantId": "00000000-0000-0000-0000-000000003102"
+        }
+      ],
+      "state": "Enabled",
+      "subscriptionId": "00000000-0000-0000-0000-000000003002",
+      "subscriptionPolicies": {
+        "locationPlacementId": "Internal_2014-09-01",
+        "quotaId": "Internal_2014-09-01",
+        "spendingLimit": "Off"
+      },
+      "tags": {
+        "tagKey1": "tagValue1",
+        "tagKey2": "tagValue2"
+      },
+      "tenantId": "00000000-0000-0000-0000-0000000000a0"
+    }
+  ]
+}

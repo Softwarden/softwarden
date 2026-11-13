@@ -1,0 +1,182 @@
+[
+  {
+    "id": "0oa00000000000000001",
+    "name": "workday",
+    "orn": "orn:okta:idp:00o00000000000000000:apps:workday:0oa00000000000000001",
+    "label": "hrportal2",
+    "status": "ACTIVE",
+    "lastUpdated": "2021-05-17T23:10:50.000Z",
+    "created": "2021-05-17T23:10:49.000Z",
+    "accessibility": {
+      "selfService": false,
+      "errorRedirectUrl": null,
+      "loginRedirectUrl": null
+    },
+    "visibility": {
+      "autoSubmitToolbar": false,
+      "hide": {
+        "iOS": false,
+        "web": false
+      },
+      "appLinks": {
+        "login": true
+      }
+    },
+    "features": [],
+    "signOnMode": "SAML_2_0",
+    "credentials": {
+      "userNameTemplate": {
+        "template": "${source.login}",
+        "type": "BUILT_IN"
+      },
+      "signing": {
+        "kid": "SYNTHETIC-KID"
+      }
+    },
+    "settings": {
+      "app": {
+        "siteURL": "https://hr.example.com"
+      },
+      "notifications": {
+        "vpn": {
+          "network": {
+            "connection": "DISABLED"
+          },
+          "message": null,
+          "helpUrl": null
+        }
+      },
+      "signOn": {
+        "defaultRelayState": null,
+        "ssoAcsUrlOverride": null,
+        "audienceOverride": null,
+        "recipientOverride": null,
+        "destinationOverride": null,
+        "attributeStatements": []
+      }
+    },
+    "_links": {
+      "help": {
+        "href": "https://example.okta.com/app/workday/0oa00000000000000001/setup/help/SAML_2_0/external-doc",
+        "type": "text/html"
+      },
+      "metadata": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000001/sso/saml/metadata",
+        "type": "application/xml"
+      },
+      "appLinks": [
+        {
+          "name": "login",
+          "href": "https://example.okta.com/home/workday/0oa00000000000000001/30",
+          "type": "text/html"
+        }
+      ],
+      "groups": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000001/groups"
+      },
+      "logo": [
+        {
+          "name": "medium",
+          "href": "https://tc2static.oktacdn.com/fs/bcg/4/gfs1wwhrwJR4LpB5X0w6",
+          "type": "image/png"
+        }
+      ],
+      "users": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000001/users"
+      },
+      "deactivate": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000001/lifecycle/deactivate"
+      }
+    }
+  },
+  {
+    "id": "0oa00000000000000002",
+    "name": "workday",
+    "orn": "orn:okta:idp:00o00000000000000000:apps:workday:0oa00000000000000002",
+    "label": "hrportal1",
+    "status": "ACTIVE",
+    "lastUpdated": "2021-05-17T23:10:22.000Z",
+    "created": "2021-05-17T23:10:22.000Z",
+    "accessibility": {
+      "selfService": false,
+      "errorRedirectUrl": null,
+      "loginRedirectUrl": null
+    },
+    "visibility": {
+      "autoSubmitToolbar": false,
+      "hide": {
+        "iOS": false,
+        "web": false
+      },
+      "appLinks": {
+        "login": true
+      }
+    },
+    "features": [],
+    "signOnMode": "SAML_2_0",
+    "credentials": {
+      "userNameTemplate": {
+        "template": "${source.login}",
+        "type": "BUILT_IN"
+      },
+      "signing": {
+        "kid": "SYNTHETIC-KID"
+      }
+    },
+    "settings": {
+      "app": {
+        "siteURL": "https://hr.example.com"
+      },
+      "notifications": {
+        "vpn": {
+          "network": {
+            "connection": "DISABLED"
+          },
+          "message": null,
+          "helpUrl": null
+        }
+      },
+      "signOn": {
+        "defaultRelayState": null,
+        "ssoAcsUrlOverride": null,
+        "audienceOverride": null,
+        "recipientOverride": null,
+        "destinationOverride": null,
+        "attributeStatements": []
+      }
+    },
+    "_links": {
+      "help": {
+        "href": "https://example.okta.com/app/workday/0oa00000000000000002/setup/help/SAML_2_0/external-doc",
+        "type": "text/html"
+      },
+      "metadata": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000002/sso/saml/metadata",
+        "type": "application/xml"
+      },
+      "appLinks": [
+        {
+          "name": "login",
+          "href": "https://example.okta.com/home/workday/0oa00000000000000002/30",
+          "type": "text/html"
+        }
+      ],
+      "groups": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000002/groups"
+      },
+      "logo": [
+        {
+          "name": "medium",
+          "href": "https://tc2static.oktacdn.com/fs/bcg/4/gfs1wwhrwJR4LpB5X0w6",
+          "type": "image/png"
+        }
+      ],
+      "users": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000002/users"
+      },
+      "deactivate": {
+        "href": "https://example.okta.com/api/v1/apps/0oa00000000000000002/lifecycle/deactivate"
+      }
+    }
+  }
+]

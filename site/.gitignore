@@ -1,0 +1,10 @@
+# Build output and Astro's generated types and content cache
+dist/
+.astro/
+node_modules/
+# Local screenshots and scripts from checking the build
+.scratch/
+.vercel/
+
+.vercel
+.env*

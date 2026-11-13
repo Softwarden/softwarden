@@ -1,0 +1,351 @@
+---
+import Base from './Base.astro';
+import DocsNav from '../components/DocsNav.astro';
+import '../styles/prose.css';
+import { siteConfig, githubUrl } from '../site.config';
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+interface Link {
+  href: string;
+  title: string;
+}
+interface Props {
+  title: string;
+  description: string;
+  headings: Heading[];
+  currentSlug?: string;
+  group?: string;
+  /** Repository path of the markdown file this page renders. */
+  source?: string;
+  prev?: Link;
+  next?: Link;
+  current?: 'docs' | 'changelog';
+}
+
+const { title, description, headings, currentSlug, group, source, prev, next, current = 'docs' } = Astro.props;
+const toc = headings.filter((h) => h.depth === 2 || h.depth === 3);
+---
+<Base title={title} description={description} current={current}>
+  <div class="docs wrap">
+    <aside class="docs-side" aria-label="Documentation">
+      <div class="side-sticky">
+        <DocsNav currentSlug={currentSlug} label="Documentation" />
+      </div>
+    </aside>
+
+    <div class="docs-body">
+      <details class="mobile-nav">
+        <summary>Documentation menu</summary>
+        <DocsNav currentSlug={currentSlug} label="Documentation, small screens" />
+      </details>
+
+      <article class="doc">
+        <header class="doc-head">
+          <p class="crumbs">
+            <a href="/docs/">Docs</a>
+            {group && <><span aria-hidden="true"> / </span><span>{group}</span></>}
+          </p>
+          <h1>{title}</h1>
+          {
+            source && (
+              <p class="source muted">
+                {siteConfig.githubPublic ? (
+                  <>
+                    From <a href={githubUrl(source)}>{source}</a> in the repository.{' '}
+                    <a href={`${siteConfig.repo}/edit/${siteConfig.repoBranch}/${source}`}>Edit on GitHub</a>
+                  </>
+                ) : (
+                  <>
+                    From <code>{source}</code> in the repository.
+                  </>
+                )}
+              </p>
+            )
+          }
+        </header>
+
+        {
+          toc.length > 2 && (
+            <details class="mobile-toc">
+              <summary>On this page</summary>
+              <ul>
+                {toc.map((h) => (
+                  <li class:list={[`d${h.depth}`]}>
+                    <a href={`#${h.slug}`}>{h.text}</a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )
+        }
+
+        <div class="prose">
+          <slot />
+        </div>
+
+        {
+          (prev || next) && (
+            <nav class="pager" aria-label="Previous and next page">
+              {prev ? (
+                <a class="prev" href={prev.href} rel="prev">
+                  <span class="dir">Previous</span>
+                  <span class="t">{prev.title}</span>
+                </a>
+              ) : (
+                <span />
+              )}
+              {next && (
+                <a class="next" href={next.href} rel="next">
+                  <span class="dir">Next</span>
+                  <span class="t">{next.title}</span>
+                </a>
+              )}
+            </nav>
+          )
+        }
+      </article>
+    </div>
+
+    {
+      toc.length > 0 && (
+        <aside class="docs-toc" aria-labelledby="toc-title">
+          <div class="side-sticky">
+            <p id="toc-title" class="toc-title">On this page</p>
+            <ul>
+              {toc.map((h) => (
+                <li class:list={[`d${h.depth}`]}>
+                  <a href={`#${h.slug}`} data-toc={h.slug}>
+                    {h.text}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
+      )
+    }
+  </div>
+</Base>
+
+<script>
+  import { addCodeCopyButtons } from '../scripts/copy';
+  addCodeCopyButtons();
+
+  // Mark the section in view in the table of contents.
+  const links = new Map<string, HTMLAnchorElement>();
+  document.querySelectorAll<HTMLAnchorElement>('.docs-toc a[data-toc]').forEach((a) => links.set(a.dataset.toc!, a));
+  const headings = Array.from(links.keys())
+    .map((id) => document.getElementById(id))
+    .filter((h): h is HTMLElement => !!h);
+  if (headings.length) {
+    let currentId = '';
+    const update = () => {
+      let id = headings[0].id;
+      for (const h of headings) {
+        if (h.getBoundingClientRect().top < 120) id = h.id;
+        else break;
+      }
+      if (id === currentId) return;
+      links.get(currentId)?.removeAttribute('aria-current');
+      links.get(id)?.setAttribute('aria-current', 'location');
+      currentId = id;
+    };
+    let ticking = false;
+    window.addEventListener(
+      'scroll',
+      () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          update();
+        });
+      },
+      { passive: true },
+    );
+    update();
+  }
+</script>
+
+<style>
+  .docs {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr) 220px;
+    gap: 48px;
+    align-items: start;
+    padding-block: 32px 96px;
+  }
+  .side-sticky {
+    position: sticky;
+    top: 88px;
+    max-height: calc(100vh - 104px);
+    overflow-y: auto;
+    padding-bottom: 16px;
+    overscroll-behavior: contain;
+  }
+  .docs-side .side-sticky {
+    margin-left: -10px;
+  }
+  .mobile-nav,
+  .mobile-toc {
+    display: none;
+  }
+  .doc {
+    min-width: 0;
+    max-width: 800px;
+  }
+  .doc-head {
+    display: grid;
+    gap: 10px;
+    padding-bottom: 24px;
+    margin-bottom: 8px;
+  }
+  .crumbs {
+    font-size: 14px;
+    color: var(--muted-foreground);
+  }
+  .crumbs a {
+    color: var(--muted-foreground);
+  }
+  .doc-head h1 {
+    font-size: clamp(30px, 3.6vw, 40px);
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+  }
+  .source {
+    font-size: 14px;
+  }
+  .source code {
+    font-size: 13px;
+  }
+  .toc-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
+    margin-bottom: 8px;
+  }
+  .docs-toc ul,
+  .mobile-toc ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1px;
+    font-size: 13.5px;
+    line-height: 1.4;
+  }
+  .docs-toc a,
+  .mobile-toc a {
+    display: block;
+    padding: 4px 0 4px 12px;
+    border-left: 2px solid var(--border);
+    color: var(--muted-foreground);
+    text-decoration: none;
+  }
+  .docs-toc .d3 a,
+  .mobile-toc .d3 a {
+    padding-left: 24px;
+    font-size: 13px;
+  }
+  .docs-toc a:hover {
+    color: var(--foreground);
+    border-left-color: var(--border-strong);
+  }
+  .docs-toc a[aria-current='location'] {
+    color: var(--accent-foreground);
+    border-left-color: var(--accent-line);
+    font-weight: 500;
+  }
+  .pager {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+  .pager a {
+    display: grid;
+    gap: 2px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    text-decoration: none;
+    transition: border-color var(--duration-fast) var(--ease);
+  }
+  .pager a:hover {
+    border-color: var(--accent-line);
+  }
+  .pager .next {
+    text-align: right;
+    grid-column: 2;
+  }
+  .pager .dir {
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .pager .t {
+    color: var(--link);
+    font-weight: 600;
+  }
+  details > summary {
+    cursor: pointer;
+    font-weight: 500;
+    padding: 10px 14px;
+    list-style-position: inside;
+  }
+  @media (max-width: 1180px) {
+    .docs {
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 40px;
+    }
+    .docs-toc {
+      display: none;
+    }
+    .mobile-toc {
+      display: block;
+    }
+  }
+  @media (max-width: 860px) {
+    .docs {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      padding-top: 16px;
+    }
+    .docs-side {
+      display: none;
+    }
+    .mobile-nav {
+      display: block;
+      margin-bottom: 20px;
+    }
+  }
+  .mobile-nav,
+  .mobile-toc {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+  }
+  .mobile-nav[open] :global(.docs-nav) {
+    padding: 4px 4px 14px;
+  }
+  .mobile-toc {
+    margin-bottom: 24px;
+  }
+  .mobile-toc ul {
+    padding: 0 14px 12px;
+  }
+  @media (max-width: 560px) {
+    .pager {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pager .next {
+      grid-column: 1;
+    }
+  }
+</style>

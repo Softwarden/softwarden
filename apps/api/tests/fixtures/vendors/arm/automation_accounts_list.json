@@ -1,0 +1,14 @@
+{
+  "value": [
+    {
+      "name": "JPEDDeployDSC1",
+      "type": "Microsoft.Automation/AutomationAccounts",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000003001/resourceGroups/rg1/providers/Microsoft.Automation/automationAccounts/JPEDDeployDSC1",
+      "location": "japaneast",
+      "properties": {
+        "creationTime": "2015-04-28T23:48:25.143+00:00",
+        "lastModifiedTime": "2017-02-09T21:35:16.06+00:00"
+      }
+    }
+  ]
+}

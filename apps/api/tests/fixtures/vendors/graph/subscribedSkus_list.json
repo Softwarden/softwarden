@@ -1,0 +1,59 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#subscribedSkus",
+  "value": [
+    {
+      "accountName": "Sample account One",
+      "accountId": "00000000-0000-0000-0000-000000001001",
+      "appliesTo": "User",
+      "capabilityStatus": "Enabled",
+      "consumedUnits": 14,
+      "id": "00000000-0000-0000-0000-0000000000a0_00000000-0000-0000-0000-000000001002",
+      "prepaidUnits": {
+        "enabled": 25,
+        "lockedOut": 0,
+        "suspended": 0,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-0000-0000-000000001003",
+          "servicePlanName": "ADALLOM_S_O365",
+          "provisioningStatus": "Success",
+          "appliesTo": "Company"
+        }
+      ],
+      "skuId": "00000000-0000-0000-0000-000000001002",
+      "skuPartNumber": "ENTERPRISEPREMIUM",
+      "subscriptionIds": [
+        "00000000-0000-0000-0000-000000001004"
+      ]
+    },
+    {
+      "accountName": "Sample account Two",
+      "accountId": "00000000-0000-0000-0000-000000001005",
+      "appliesTo": "User",
+      "capabilityStatus": "Suspended",
+      "consumedUnits": 14,
+      "id": "00000000-0000-0000-0000-0000000000a0_00000000-0000-0000-0000-000000001006",
+      "prepaidUnits": {
+        "enabled": 0,
+        "lockedOut": 0,
+        "suspended": 25,
+        "warning": 0
+      },
+      "servicePlans": [
+        {
+          "servicePlanId": "00000000-0000-0000-0000-000000001007",
+          "servicePlanName": "CRMSTANDARD",
+          "provisioningStatus": "Disabled",
+          "appliesTo": "User"
+        }
+      ],
+      "skuId": "00000000-0000-0000-0000-000000001006",
+      "skuPartNumber": "CRMSTANDARD",
+      "subscriptionIds": [
+        "00000000-0000-0000-0000-000000001008"
+      ]
+    }
+  ]
+}

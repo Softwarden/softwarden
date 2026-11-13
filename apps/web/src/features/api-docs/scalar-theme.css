@@ -1,0 +1,89 @@
+/* The API reference (Scalar, features/api-docs/scalar-reference.tsx) drawn with Softwarden's tokens: every Scalar colour
+   variable points at a token, which follows <html data-theme>, so light and dark come from tokens.json and pass the
+   same contrast checks as the rest of the app. Unlayered on purpose: Scalar's own values are in cascade layers
+   (scalar-base, scalar-theme), and unlayered declarations win over layered ones whatever their specificity. The
+   selectors are the elements Scalar declares its variables on (the document, its light-mode and dark-mode classes,
+   the app root), so its popovers teleported to <body> get them too. Loaded only with the API reference chunk. Flat, as
+   the rest of the app: borders, not shadows. */
+:root,
+.light-mode,
+.dark-mode,
+.scalar-app {
+  --scalar-font: var(--font-sans);
+  --scalar-font-code: var(--font-mono);
+  --scalar-radius: 4px;
+  --scalar-paragraph: 14px;
+  --scalar-small: 13px;
+  --scalar-page-description: 15px;
+
+  --scalar-color-1: var(--foreground);
+  --scalar-color-2: var(--muted-foreground);
+  --scalar-color-3: var(--muted-foreground);
+  --scalar-color--1: var(--text-strong);
+  --scalar-color-accent: var(--link);
+  --scalar-background-1: var(--card);
+  --scalar-background-2: var(--background);
+  --scalar-background-3: var(--muted);
+  --scalar-background-4: var(--border-subtle);
+  --scalar-background-accent: var(--accent);
+  --scalar-border-color: var(--border);
+
+  --scalar-color-green: var(--success-foreground);
+  --scalar-color-red: var(--error-foreground);
+  --scalar-color-yellow: var(--state-pending-foreground);
+  --scalar-color-blue: var(--link);
+  --scalar-color-orange: var(--gap-foreground);
+  --scalar-color-purple: var(--kind-integration-foreground);
+  --scalar-color-query: var(--link);
+  --scalar-color-alert: var(--warning-foreground);
+  --scalar-background-alert: var(--warning-bg);
+  --scalar-color-danger: var(--error-foreground);
+  --scalar-background-danger: var(--error-bg);
+
+  --scalar-button-1: var(--primary);
+  --scalar-button-1-hover: var(--primary-hover);
+  --scalar-button-1-color: var(--primary-foreground);
+  --scalar-link-color: var(--link);
+  --scalar-link-color-hover: var(--link);
+  --scalar-link-color-visited: var(--link);
+  --scalar-focus-color: var(--ring);
+  --scalar-tooltip-background: var(--popover);
+  --scalar-tooltip-color: var(--popover-foreground);
+  --scalar-scrollbar-color: var(--border-strong);
+  --scalar-scrollbar-color-active: var(--muted-foreground);
+  --scalar-shadow-1: none;
+  --scalar-shadow-2: 0 0 0 1px var(--border);
+
+  --scalar-sidebar-background-1: var(--card);
+  --scalar-sidebar-color-1: var(--foreground);
+  --scalar-sidebar-color-2: var(--muted-foreground);
+  --scalar-sidebar-color-active: var(--accent-foreground);
+  --scalar-sidebar-item-active-background: var(--accent);
+  --scalar-sidebar-item-hover-background: var(--row-hover);
+  --scalar-sidebar-item-hover-color: var(--foreground);
+  --scalar-sidebar-border-color: var(--border);
+  --scalar-sidebar-search-background: var(--background);
+  --scalar-sidebar-search-color: var(--muted-foreground);
+  --scalar-sidebar-search-border-color: var(--input);
+  --scalar-sidebar-indent-border: var(--border);
+  --scalar-sidebar-indent-border-hover: var(--border-strong);
+  --scalar-sidebar-indent-border-active: var(--accent-line);
+
+  --scalar-header-background-1: var(--card);
+  --scalar-header-background-2: var(--background);
+  --scalar-header-color-1: var(--foreground);
+  --scalar-header-color-2: var(--muted-foreground);
+  --scalar-header-border-color: var(--border);
+  --scalar-header-call-to-action-color: var(--link);
+}
+
+/* Inside the app's content column: the reference's own sidebar sticks below nothing (no Scalar header). */
+.sw-api-reference {
+  --scalar-custom-header-height: 0px;
+  --scalar-sidebar-sticky-offset: 0px;
+}
+
+/* One h1 per page: Scalar always renders its document title as an <h1> (no option sets its level), and the
+   page's own h1 already says what the page is. The title is hidden; scalar-reference.tsx also demotes it to level 2 for
+   assistive technology, in case a Scalar update shows it again. */
+.sw-api-reference .introduction-section h1.section-header-label { display: none; }

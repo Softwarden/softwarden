@@ -1,0 +1,128 @@
+# The only published entry point (compose.yaml `proxy`): TLS and security headers in front of
+# gunicorn.
+{
+	admin off
+	# Caddy's local CA stays inside its volume; nothing is added to any trust store.
+	skip_install_trust
+	# The HTTP -> HTTPS redirect is the site block below, so it keeps a non-default HTTPS_PORT.
+	auto_https disable_redirects
+	# Caddy has no access log here, but its error log (logger http.log.error: an upstream 502 while the app restarts,
+	# a timeout) records each failed request's full URI, query string included. Secrets travel there: the renewals
+	# calendar feed's ?token=, an OpenID Connect callback's code and state, the first-run ?setup_token=. So the
+	# default logger drops the whole query from request>uri, as the app's own log does (it
+	# used to drop only `token`). Checked against caddy 2.11.9: a 502 for /x?code=abc&state=def logs "uri":"/x".
+	# Caddy already redacts the Cookie and Authorization request headers in its logs (log_credentials is off).
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "\?.*$" ""
+			}
+		}
+	}
+	# Explicit server timeouts. By default Caddy bounds only header reads (1 min) and idle connections (5 min), and
+	# never the time to read a body. read_header ends slow-header clients. read_body is the whole request, body
+	# included (Go's ReadTimeout): long enough for the largest upload (SOFTWARDEN_MAX_REQUEST_MB, 26 MiB by default) at
+	# about 1 Mbit/s, and it ends a client that declares a body it never sends. write covers the
+	# app's answer plus sending it: gunicorn's 120 s timeout, a 25 MB download or a 100,000-row audit export to a
+	# slow client. idle closes kept-alive connections nobody uses.
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 5m
+			write 10m
+			idle 2m
+		}
+	}
+}
+
+# Plain HTTP only redirects, to the published HTTPS port (HTTPS_PORT in compose.yaml, default 443).
+http://{$PUBLIC_HOSTNAME:localhost} {
+	# No `Server: Caddy` on the redirect either (SECURITY.md says no Server header).
+	header -Server
+	redir https://{host}:{$HTTPS_PORT:443}{uri} permanent
+}
+
+# CADDY_TLS is "internal" (Caddy's local CA, the default) or "/certs/cert.pem /certs/key.pem" for a provided
+# certificate (TLS_CERT_DIR in compose.yaml). PUBLIC_HOSTNAME is the name people open, default localhost.
+{$PUBLIC_HOSTNAME:localhost} {
+	tls {$CADDY_TLS:internal}
+	encode zstd gzip
+
+	# -Server and -Via: no product name or version on any response (SECURITY.md); reverse_proxy adds `Via: 1.1 Caddy`.
+	header {
+		X-Content-Type-Options "nosniff"
+		-Server
+		-Via
+	}
+	# The app sends these policies itself (apps/api/softwarden/security_headers.py, the same values;
+	# tests/test_security_headers.py compares them), so a Helm or other-proxy install has them too; here they are a
+	# second layer that in practice covers Caddy's own responses (the /mcp 404).
+	# `?` sets a header only when the response has none, so the app's own policies win: the sandboxing CSP on
+	# attachment downloads (catalog/attachment_viewsets.py), and the nonce CSP of the optional `ee` package's SAML
+	# pages. Everything else, the SPA first, gets this one. The SPA has no inline script
+	# (index.html loads theme-init.js as a file); 'unsafe-inline' styles are for the <style> elements Radix and
+	# Scalar inject at run time. frame-ancestors 'none' does X-Frame-Options' job.
+	# One `header` directive per `?` header: a `?` field makes its whole block conditional on that header being absent
+	# (Caddy's response `require`), so in a shared block Django's COOP would switch off the CSP as well.
+	header ?Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+	header ?Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	# Conditional too, so a page's own policy wins (the optional `ee` package's SAML pages send `no-referrer`).
+	header ?Referrer-Policy "same-origin"
+	# Django's SecurityMiddleware sends the same value on the app's responses; this covers Caddy's own (the /mcp 404).
+	header ?Cross-Origin-Opener-Policy "same-origin"
+	# HSTS only for a real host name: on localhost it would pin every local port (Vite on 5173, a debug 8080) to
+	# HTTPS for a year once someone trusts the local CA.
+	# No request body over the app's own limit reaches it (defence in depth for core/upload_limit.py): the same
+	# SOFTWARDEN_MAX_REQUEST_MB in MiB (the app counts 1024 x 1024 bytes too; Caddy's plain MB is 1000 x 1000), the
+	# attachment limit plus 1 MiB for multipart framing (compose.yaml passes it).
+	request_body {
+		max_size {$SOFTWARDEN_MAX_REQUEST_MB:26}MiB
+	}
+
+	@hsts not host localhost 127.0.0.1 [::1]
+	header @hsts Strict-Transport-Security "max-age=31536000"
+
+	# No access log on purpose. If you add a `log` block here, drop the query from request>uri with the same
+	# `format filter` as the global `log` above: the renewals calendar feed (?token=), the sign-in callbacks (?code=,
+	# ?state=) and first-run setup (?setup_token=) carry secrets there. The app logs paths only.
+	# Caddy replaces any client X-Forwarded-For with the real client address and sets X-Forwarded-Proto; the app
+	# believes those headers only from this container (SOFTWARDEN_TRUSTED_PROXIES=proxy, core/middleware.py). If a
+	# load balancer sits in front of Caddy, list it in a global `servers { trusted_proxies ... }` block, with
+	# `trusted_proxies_strict` so Caddy takes the rightmost untrusted address (without it, the leftmost, which a client
+	# can write).
+	# Every request gets Caddy's own request UUID as X-Request-ID (a client's header is replaced), which the app writes
+	# on the request's audit events and returns in the response (core/request_context.py).
+	# /mcp is the MCP server (compose profile `mcp`, docs/MCP.md), proxied only while SOFTWARDEN_MCP_UPSTREAM is set
+	# (mcp:8001 with the profile). Unset, /mcp answers 404 and no upstream name is ever looked up, so a bearer token
+	# can't reach whatever `mcp` might resolve to through the host's DNS search domains. Everything else is the app.
+	@mcp {
+		path /mcp /mcp/*
+		expression `{env.SOFTWARDEN_MCP_UPSTREAM} != ""`
+	}
+	# The MCP server limits refused tokens per client address, taken from X-Forwarded-For (MCP_FORWARDED_ALLOW_IPS=*
+	# in compose, which believes the leftmost entry): send it exactly the one address Caddy resolved, never a list a
+	# client could have started.
+	handle @mcp {
+		reverse_proxy {$SOFTWARDEN_MCP_UPSTREAM:mcp-disabled.invalid:9} {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+	@mcp_off path /mcp /mcp/*
+	handle @mcp_off {
+		respond "Not found" 404
+	}
+	# /healthz/ops (the operator health view) goes through like everything else: the app answers it only to the ops
+	# bearer token or an Admin session and is a 404 to anyone else, so an outside monitor can use it over HTTPS.
+	# request_buffers: Caddy reads a request's whole body (up to the same SOFTWARDEN_MAX_REQUEST_MB, so every body the
+	# app accepts) before it opens the upstream request. A client that declares a body and sends it one byte at a
+	# time then ties up only Caddy, never one of gunicorn's threads: three such sockets used to stop every worker
+	# (ops/ci/slowbody-smoke.py checks it in CI). read_body above still ends such a client
+	# after 5 minutes.
+	handle {
+		reverse_proxy app:8000 {
+			request_buffers {$SOFTWARDEN_MAX_REQUEST_MB:26}MiB
+			header_up X-Request-ID {http.request.uuid}
+		}
+	}
+}

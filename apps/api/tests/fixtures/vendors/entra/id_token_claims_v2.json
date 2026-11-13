@@ -1,0 +1,25 @@
+{
+  "header": {
+    "typ": "JWT",
+    "alg": "RS256",
+    "kid": "SYNTHETIC-KID"
+  },
+  "payload": {
+    "aud": "00000000-0000-0000-0000-000000007001",
+    "iss": "https://login.microsoftonline.com/00000000-0000-0000-0000-0000000000a0/v2.0",
+    "iat": 1760000000,
+    "nbf": 1760000000,
+    "exp": 1760003600,
+    "aio": "SYNTHETIC-OPAQUE",
+    "name": "Alex Example",
+    "nonce": "synthetic-nonce",
+    "oid": "00000000-0000-0000-0000-000000007002",
+    "preferred_username": "alex@example.com",
+    "rh": "SYNTHETIC-OPAQUE",
+    "sid": "00000000-0000-0000-0000-000000007003",
+    "sub": "SYNTHETIC-PAIRWISE-SUB",
+    "tid": "00000000-0000-0000-0000-0000000000a0",
+    "uti": "SYNTHETIC-UTI",
+    "ver": "2.0"
+  }
+}

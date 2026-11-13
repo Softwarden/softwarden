@@ -1,0 +1,5 @@
+{
+  "_status": "HTTP/1.1 200 OK",
+  "OData-Version": "4.0",
+  "Preference-Applied": "odata.maxpagesize=2"
+}

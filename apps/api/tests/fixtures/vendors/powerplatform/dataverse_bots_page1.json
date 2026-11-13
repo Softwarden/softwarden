@@ -1,0 +1,26 @@
+{
+  "@odata.context": "https://org00000001.crm.dynamics.com/api/data/v9.2/$metadata#bots(botid,name,schemaname,statecode,statuscode,authenticationmode,accesscontrolpolicy,language,publishedon,componentstate,_ownerid_value)",
+  "value": [
+    {
+      "@odata.etag": "W/\"80648695\"",
+      "botid": "00000000-0000-0000-0000-000000004101",
+      "name": "Synthetic HR Helper",
+      "schemaname": "cr123_hrHelper",
+      "statecode": 0,
+      "statecode@OData.Community.Display.V1.FormattedValue": "Active",
+      "statuscode": 1,
+      "statuscode@OData.Community.Display.V1.FormattedValue": "Provisioned",
+      "authenticationmode": 2,
+      "authenticationmode@OData.Community.Display.V1.FormattedValue": "Integrated",
+      "accesscontrolpolicy": 0,
+      "accesscontrolpolicy@OData.Community.Display.V1.FormattedValue": "Any",
+      "language": 1033,
+      "publishedon": "2025-03-01T12:00:00Z",
+      "publishedon@OData.Community.Display.V1.FormattedValue": "3/1/2025 12:00 PM",
+      "componentstate": 0,
+      "_ownerid_value": "00000000-0000-0000-0000-000000004102",
+      "_ownerid_value@OData.Community.Display.V1.FormattedValue": "Alex Example"
+    }
+  ],
+  "@odata.nextLink": "https://org00000001.crm.dynamics.com/api/data/v9.2/bots?$select=botid,name&$skiptoken=%3Ccookie%20pagenumber=%222%22%20pagingcookie=%22SYNTHETIC%22%20istracking=%22False%22%20/%3E"
+}
