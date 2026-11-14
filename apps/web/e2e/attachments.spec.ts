@@ -40,8 +40,10 @@ test("Attachments tab: upload a PDF, add a SharePoint link, edit with If-Match, 
   await expect(page.getByRole("button", { name: "Upload file" })).toBeFocused(); // focus back on the opener
   const table = page.getByRole("region", { name: `Attachments of ${t} Payroll table` });
   const contract = table.locator('tbody[data-category="contract"]');
-  await expect(contract.getByRole("rowheader")).toContainText("Payroll contract 2026");
-  await expect(contract.getByRole("rowheader")).toContainText("payroll-contract.pdf");
+  // The group's own heading cell (scope="rowgroup") is a row header too; the file's row is the one that names it.
+  const fileHeader = contract.getByRole("rowheader", { name: /Payroll contract 2026/ });
+  await expect(fileHeader).toContainText("Payroll contract 2026");
+  await expect(fileHeader).toContainText("payroll-contract.pdf");
   await expect(contract.getByRole("row", { name: /Payroll contract 2026/ })).toContainText(/\d+(\.\d)? (bytes|KB)/);
   await expect(contract.getByRole("row", { name: /Payroll contract 2026/ })).toContainText("Sam Editor");
   await expect(page.getByRole("tab", { name: "Attachments (1)" })).toBeVisible();
