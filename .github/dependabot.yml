@@ -1,8 +1,8 @@
 # Dependabot: keeps the pins current. The workflows' actions are pinned to commit SHAs
 # with the version in a comment, and the base and Compose images to digests; ops/ci/check-pins.sh (CI's deploy-config
 # job) refuses anything unpinned. Dependabot proposes each update as a pull request, which runs the full CI.
-# Weekly, grouped by ecosystem so a week's updates arrive as one pull request each. Major versions come separately:
-# they can change behavior, so each one is read before it is merged.
+# Weekly, grouped by ecosystem so a week's updates arrive as one pull request each. Major versions are not proposed:
+# they can change behavior, so a maintainer upgrades them deliberately, on a branch of their own.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -11,6 +11,9 @@ updates:
     groups:
       actions:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
 
   # Dockerfile (node, python, uv) and mcp/Dockerfile (python, uv): tag and digest.
   - package-ecosystem: docker
@@ -48,6 +51,9 @@ updates:
     groups:
       python:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: npm
     directory: /apps/web
@@ -55,6 +61,9 @@ updates:
     groups:
       web:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
 
   # The website (site/): its own lockfile, never in the image.
   - package-ecosystem: npm
@@ -63,3 +72,6 @@ updates:
     groups:
       site:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
