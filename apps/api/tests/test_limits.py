@@ -547,7 +547,16 @@ def session(user):
     return client
 
 
-def test_the_org_rate_counts_every_user_of_one_organization_together(a, b, settings):
+@pytest.fixture
+def one_window(monkeypatch):
+    """The organization's API rate counts per clock minute (core/counters.py), so a test that straddled a minute
+    boundary would start a fresh window halfway. Pin the clock mid-minute so each test stays in one window."""
+    from core import counters
+
+    monkeypatch.setattr(counters, "clock", lambda: 1_800_000_030.0)
+
+
+def test_the_org_rate_counts_every_user_of_one_organization_together(a, b, settings, one_window):
     settings.API_READ_RATE = "1000/min"  # the per-user bucket out of the way
     set_limit(a["org"], "api_rate_read", 3)
     set_limit(b["org"], "api_rate_read", 3)
@@ -566,7 +575,7 @@ def test_the_org_rate_counts_every_user_of_one_organization_together(a, b, setti
     assert other.get("/api/v1/vendors").status_code == 429
 
 
-def test_the_org_write_rate_is_its_own_bucket(a, settings):
+def test_the_org_write_rate_is_its_own_bucket(a, settings, one_window):
     settings.API_WRITE_RATE = "1000/min"
     set_limit(a["org"], "api_rate_write", 1)
     admin, editor = session(a["users"]["admin"]), session(a["users"]["editor"])
@@ -587,7 +596,7 @@ def test_the_org_rate_is_skipped_when_unlimited(a, settings):
         assert client.get("/api/v1/vendors").status_code == 200
 
 
-def test_an_api_token_shares_its_organizations_bucket(a, settings):
+def test_an_api_token_shares_its_organizations_bucket(a, settings, one_window):
     from tests.test_rate_limits import token_client
 
     settings.API_READ_RATE = "1000/min"
