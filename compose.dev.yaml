@@ -66,7 +66,7 @@ services:
 
   # A local mail catcher, loopback only. Ports clear of 5434 (db), 8080 (app), 5173/5174 (Vite), 8011 (e2e API).
   mailpit:
-    image: axllent/mailpit:v1.21.8@sha256:81370195cd4a0eab9604d17c2617a7525b0486f9365555253b6c5376c6350f1a
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
     ports:
       - "127.0.0.1:8025:8025"   # web view
       - "127.0.0.1:1025:1025"   # SMTP, for an API or worker run outside Docker
