@@ -15,10 +15,10 @@ export const siteConfig = {
   repoBranch: 'main',
 
   /**
-   * The repository is not public yet. While false: no GitHub links or buttons in the nav, footer or calls to action,
+   * Whether the repository is public. While false: no GitHub links or buttons in the nav, footer or calls to action,
    * and links in the docs to repository files that are not on this site render as plain text.
    */
-  githubPublic: false,
+  githubPublic: true,
 
   signup: {
     /**
