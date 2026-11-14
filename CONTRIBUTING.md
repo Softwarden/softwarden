@@ -111,7 +111,8 @@ Signed-off-by: Ada Example <ada@example.com>
 
 The email must be the commit's author email. The `DCO sign-off` check in CI fails a pull request with a commit that
 isn't signed off by its author; `bash ops/ci/check-dco.sh origin/main` runs the same check locally, and
-`git rebase --signoff origin/main` adds the missing lines.
+`git rebase --signoff origin/main` adds the missing lines. Dependabot's version updates are the one exception: a bot
+can't certify the DCO, so the check skips its commits.
 
 ## Pull requests
 

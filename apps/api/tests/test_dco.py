@@ -67,6 +67,19 @@ def test_a_commit_without_sign_off_fails(repo: Path):
     assert "1 commit(s)" in result.stdout
 
 
+def test_dependabot_commits_are_skipped(repo: Path):
+    commit(repo, "b", "Bump a dependency", author="dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>")
+    result = run(repo)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_only_dependabot_is_skipped(repo: Path):
+    commit(repo, "b", "Bump a dependency", author="Other Bot <other[bot]@users.noreply.github.com>")
+    result = run(repo)
+    assert result.returncode == 1
+    assert "has no Signed-off-by line" in result.stdout
+
+
 def test_a_sign_off_by_someone_else_fails(repo: Path):
     commit(repo, "b", "Add b\n\nSigned-off-by: Bob Other <bob@example.test>", author="Ada Example <ada@example.test>")
     result = run(repo)

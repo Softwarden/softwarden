@@ -8,7 +8,10 @@
 # Every commit in base..head that is not a merge must carry a trailer `Signed-off-by: Name <email>` whose email is
 # the commit author's (case-insensitive), as `git commit -s` writes it. A commit with a sign-off by someone else only
 # (a co-author's, a bot's) fails: the author certifies their own contribution. Exit 1 lists each failing commit.
+# Dependabot's commits are skipped: a bot can't certify the DCO, and its updates only change pinned versions.
 set -euo pipefail
+
+dependabot='49699333+dependabot[bot]@users.noreply.github.com'
 
 base=${1:?usage: check-dco.sh <base> [head]}
 head=${2:-HEAD}
@@ -17,6 +20,7 @@ problems=0
 while IFS= read -r sha; do
   [ -n "$sha" ] || continue
   author=$(git log -1 --format='%ae' "$sha" | tr '[:upper:]' '[:lower:]')
+  [ "$author" = "$dependabot" ] && continue
   subject=$(git log -1 --format='%s' "$sha")
   signoffs=$(git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$sha" | tr '[:upper:]' '[:lower:]')
   if [ -z "$signoffs" ]; then
