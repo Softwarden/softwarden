@@ -689,7 +689,11 @@ def test_encrypt_decrypt_round_trip_with_real_openssl(db, configured, settings, 
         + ["-in", str(set_dir / f"{result['set']}.media.tar.enc"), "-out", str(tmp_path / "x")],
         capture_output=True,
     )
-    assert refused.returncode != 0
+    # AES-CBC has no integrity check: about 1 wrong key in 256 ends in valid padding and openssl exits 0 with garbage.
+    # What matters is that a wrong key never yields the archive.
+    plain = (tmp_path / "plain-media.tar.enc").read_bytes()
+    garbage = tmp_path / "x"
+    assert refused.returncode != 0 or (garbage.exists() and garbage.read_bytes() != plain)
 
 
 def cannot_run_here(reason):
