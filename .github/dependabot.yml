@@ -64,6 +64,8 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: [version-update:semver-major]
+      # Playwright is upgraded by hand: 1.48 to 1.65 changed timings enough that e2e specs need work first.
+      - dependency-name: "@playwright/test"
 
   # The website (site/): its own lockfile, never in the image.
   - package-ecosystem: npm
