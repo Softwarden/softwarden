@@ -122,13 +122,13 @@ export function Sidebar({ me, rail, onToggleRail, badge, onSwitchOrganization, s
         <div className={cn("px-2 pb-2", rail && "lg:px-1.5")}>
           {orgs.length > 1 ? (
             <div {...tipProps(`Organization: ${me.organization.name}`)}>
-              <MoreMenu label={`Organization: ${me.organization.name}. Switch organization`} menuLabel="Switch organization" align="left" caret={!rail} disabled={switching}
+              <MoreMenu label={`Organization: ${me.organization.name}. Switch organization`} menuLabel="Switch organization" align="left" caret={!rail} disabled={switching} nameFromTrigger
                 triggerClassName={cn("flex w-full items-center gap-2 rounded-md border border-sidebar-border px-2.5 py-2 text-left text-[13px] text-sidebar-foreground hover:bg-sidebar-accent/60 focus-visible:outline-sidebar-ring disabled:opacity-60", rail && "lg:justify-center lg:px-0")}
                 trigger={<>
                   <Building2 aria-hidden="true" className="size-4 shrink-0" />
                   <span className={cn("min-w-0 flex-1", label)}>
-                    <span className="block text-[11px] text-sidebar-muted">Organization</span>
-                    <span className="block truncate font-semibold text-sidebar-accent-foreground">{switching ? "Switching…" : me.organization.name}</span>
+                    <span className="block text-[11px] text-sidebar-muted">Organization<span className="sr-only">: </span></span>
+                    <span className="block truncate font-semibold text-sidebar-accent-foreground">{switching ? "Switching…" : me.organization.name}<span className="sr-only">. Switch organization</span></span>
                   </span>
                 </>}
                 actions={orgs.map((o) => ({ label: `${o.name} (${o.role.charAt(0).toUpperCase() + o.role.slice(1)})`, checked: o.id === me.organization.id, onSelect: () => { if (o.id !== me.organization.id) onSwitchOrganization(o); } }))} />
@@ -168,13 +168,13 @@ export function Sidebar({ me, rail, onToggleRail, badge, onSwitchOrganization, s
         {/* User menu, then the rail toggle. */}
         <div className={cn("mt-auto flex flex-col gap-1 border-t border-sidebar-border px-2 py-3", rail && "lg:px-1.5")}>
           <div {...tipProps(`${me.user.name} · ${roleName}`)}>
-            <MoreMenu label={`${me.user.name} · ${roleName}. Account`} menuLabel="Account" side="top" align="left" caret={false}
+            <MoreMenu label={`${me.user.name} · ${roleName}. Account`} menuLabel="Account" side="top" align="left" caret={false} nameFromTrigger
               triggerClassName={cn("flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-sidebar-foreground hover:bg-sidebar-accent/60 focus-visible:outline-sidebar-ring", rail && "lg:justify-center lg:px-0")}
               trigger={<>
                 <Avatar name={me.user.name} />
                 <span className={cn("min-w-0 flex-1", label)}>
-                  <span className="block truncate font-semibold text-sidebar-accent-foreground">{me.user.name}</span>
-                  <span className="block text-[11px] text-sidebar-muted">{roleName}</span>
+                  <span className="block truncate font-semibold text-sidebar-accent-foreground">{me.user.name}<span className="sr-only"> · </span></span>
+                  <span className="block text-[11px] text-sidebar-muted">{roleName}<span className="sr-only">. Account</span></span>
                 </span>
               </>}
               actions={[

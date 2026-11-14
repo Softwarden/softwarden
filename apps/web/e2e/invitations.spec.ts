@@ -59,7 +59,7 @@ test("An existing account signs in from the invitation, joins, and a browser sig
   await expectNoViolations(page, "Invitation page, signed in as the invitee");
   await join.click();
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Organization: Contoso \(synthetic\)\. Switch organization/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Organization\s*:\s*Contoso \(synthetic\)\s*\.\s*Switch organization/ })).toBeVisible();
   const members: { email: string; role: string }[] = await (await contoso.request.get("/api/v1/users")).json();
   expect(members.find((m) => m.email === email)?.role).toBe("editor");
 

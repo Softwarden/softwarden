@@ -134,7 +134,7 @@ test("Signup end to end: the emailed link signs the new Admin in, who invites a 
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("banner").getByText(orgName)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Robin Owner · Admin. Account" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Robin Owner\s*·\s*Admin\s*\.\s*Account/ })).toBeVisible();
   await expectNoViolations(page, "Dashboard of a new organization after signup");
 
   // The new Admin invites a colleague; the invitation is emailed, and the colleague accepts it in their own browser.

@@ -26,7 +26,7 @@ test("A user in two organizations switches; cached lists, palette results and ot
   const context = await browser.newContext({ baseURL });
   const page = await context.newPage();
   await signIn(page, "multi@example.test");
-  const switcher = page.getByRole("button", { name: /Organization: Contoso \(synthetic\)\. Switch organization/ });
+  const switcher = page.getByRole("button", { name: /Organization\s*:\s*Contoso \(synthetic\)\s*\.\s*Switch organization/ });
   await expect(switcher).toBeVisible();
   await post(page, "applications", { name: `${t} In Contoso`, lifecycle: "active" });
   const table = (p: Page) => p.getByRole("region", { name: "Applications table" });
@@ -53,7 +53,7 @@ test("A user in two organizations switches; cached lists, palette results and ot
   await menu.getByRole("menuitemradio", { name: "Fabrikam (synthetic) (Editor)" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeFocused();
-  await expect(page.getByRole("button", { name: /Organization: Fabrikam \(synthetic\)\. Switch organization/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Organization\s*:\s*Fabrikam \(synthetic\)\s*\.\s*Switch organization/ })).toBeVisible();
   await expect(page.locator("header")).toContainText("Fabrikam (synthetic)");
   await expect(page.getByTestId("shell-announcer")).toHaveText("Switched to Fabrikam (synthetic).");
   await expectNoViolations(page, "Dashboard after switching organization");
@@ -73,7 +73,7 @@ test("A user in two organizations switches; cached lists, palette results and ot
   // The other tab followed: it says so, and its list shows Fabrikam's (empty) result.
   await expect(other.getByTestId("tab-notice")).toContainText("This tab switched to Fabrikam (synthetic)");
   await expect(other.getByTestId("shell-announcer")).toContainText("This tab switched to Fabrikam (synthetic)");
-  await expect(other.getByRole("button", { name: /Organization: Fabrikam \(synthetic\)/ })).toBeVisible();
+  await expect(other.getByRole("button", { name: /Organization\s*:\s*Fabrikam \(synthetic\)/ })).toBeVisible();
   await expect(contosoRow(other)).toHaveCount(0);
   await expect(other.getByText("No applications match these filters")).toBeVisible();
   await expectNoViolations(other, "A tab that followed a switch made in another tab");
@@ -85,7 +85,7 @@ test("A user in two organizations switches; cached lists, palette results and ot
   await page.getByRole("option", { name: "Switch organization to Contoso (synthetic)" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeFocused();
-  await expect(page.getByRole("button", { name: /Organization: Contoso \(synthetic\)/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Organization\s*:\s*Contoso \(synthetic\)/ })).toBeVisible();
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Applications" }).click();
   await page.getByLabel("Search applications").fill(t);
   await expect(contosoRow(page)).toBeVisible();

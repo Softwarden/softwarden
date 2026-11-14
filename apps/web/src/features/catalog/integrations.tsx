@@ -45,7 +45,8 @@ type Named = { id: string; name: string };
 function End({ end }: { end: Integration["source"] }) {
   return (
     <>
-      <RecordLink record={end} className="underline" />
+      {/* A line-height of 24px keeps each end a full-size target when the cell wraps (WCAG 2.5.8). */}
+      <RecordLink record={end} className="underline leading-6" />
       {end.kind !== "application" && <span className="text-muted-foreground"> Component</span>}
       {end.instance && <span className="text-muted-foreground"> ({end.instance.name})</span>}
       {end.archived && <Chip className="ml-2 align-middle">Archived</Chip>}

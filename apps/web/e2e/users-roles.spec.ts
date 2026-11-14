@@ -148,7 +148,7 @@ test("Signing out of the app forgets an invitation token kept in the tab", async
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   await page.evaluate(() => sessionStorage.setItem("softwarden.invitation", JSON.stringify({ token: "kept-token", at: Date.now() })));
-  await page.getByRole("button", { name: /· Viewer\. Account/ }).click();
+  await page.getByRole("button", { name: /·\s*Viewer\s*\.\s*Account/ }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Sign in to Softwarden" })).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem("softwarden.invitation"))).toBeNull();

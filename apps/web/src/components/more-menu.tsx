@@ -9,12 +9,14 @@ import { cn } from "@/lib/utils";
 export type MenuAction = { label: string; onSelect: () => void; danger?: boolean; checked?: boolean };
 
 /** `about` names what the menu acts on, for screen readers, when several menus share a visible label (one per row).
- *  `trigger` replaces the button's visible content (the accessible name is still `label`, plus `about`). */
+ *  `trigger` replaces the button's visible content (the accessible name is still `label`, plus `about`), unless
+ *  `nameFromTrigger`: then the trigger's own text is the name, so it always contains what is visible (WCAG 2.5.3); give
+ *  any words that aren't visible as `sr-only` text inside the trigger. */
 /** `align` puts the menu under the button's left or right edge; `side: "top"` opens it upwards (the sidebar's user
  *  menu); `triggerClassName` replaces the outline button style (the ink sidebar). */
-export function MoreMenu({ actions, label = "More", about, size, trigger, menuLabel, align = "right", side = "bottom", triggerClassName, caret = true, disabled = false }: {
+export function MoreMenu({ actions, label = "More", about, size, trigger, menuLabel, align = "right", side = "bottom", triggerClassName, caret = true, disabled = false, nameFromTrigger = false }: {
   actions: MenuAction[]; label?: string; about?: string; size?: "sm"; trigger?: React.ReactNode; menuLabel?: string;
-  align?: "left" | "right"; side?: "top" | "bottom"; triggerClassName?: string; caret?: boolean; disabled?: boolean;
+  align?: "left" | "right"; side?: "top" | "bottom"; triggerClassName?: string; caret?: boolean; disabled?: boolean; nameFromTrigger?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // Roving tabindex: the item last focused is the one in the tab order, so a menu taller than its cap (a scroll box)
@@ -61,7 +63,7 @@ export function MoreMenu({ actions, label = "More", about, size, trigger, menuLa
   return (
     <div ref={wrap} className="relative">
       <button ref={button} type="button" disabled={disabled} className={triggerClassName ?? buttonVariants({ variant: "outline", size })} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        aria-label={trigger ? `${label}${about ? ` for ${about}` : ""}` : undefined}
+        aria-label={trigger && !nameFromTrigger ? `${label}${about ? ` for ${about}` : ""}` : undefined}
         onClick={() => { if (open) return close(); setOpen(true); setTimeout(() => focusItem(Math.max(0, actions.findIndex((a) => a.checked)))); }} onKeyDown={onButtonKey}>
         {trigger ?? <>{label}{about && <span className="sr-only"> for {about}</span>}</>}{caret && <span aria-hidden="true">▾</span>}
       </button>
