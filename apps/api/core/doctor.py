@@ -688,6 +688,30 @@ def check_sso(org) -> Check:
     return Check("sso", OK, message, organization=slug)
 
 
+def check_scim_tokens(org) -> list[Check]:
+    """Live SCIM tokens refused because the Admin who created them is no longer an active Admin here (they
+    answer 401, so the identity provider's provisioning has stopped). A warning while any exists; nothing otherwise."""
+    from django.utils import timezone
+
+    from .access import is_active_admin
+    from .models import ScimToken
+
+    live = ScimToken.objects.filter(organization=org, revoked_at=None, expires_at__gt=timezone.now())
+    stale = [t for t in live.order_by("created_at", "id") if not is_active_admin(t.created_by_id, org.pk)]
+    if not stale:
+        return []
+    names = ", ".join(t.name for t in stale[:5])
+    return [
+        Check(
+            "scim_tokens",
+            WARN,
+            f"{len(stale)} SCIM token(s) refused because their creator is no longer an active Admin: {names}.",
+            "Admin > Provisioning: create a new SCIM token, give it to the identity provider, revoke the old one.",
+            org.slug,
+        )
+    ]
+
+
 def check_discovery(org) -> list[Check]:
     from discovery.models import Connector, RunStatus
 
@@ -825,6 +849,7 @@ def _per_organization() -> list[Check]:
     for org in Organization.objects.order_by("name"):
         found += _guarded("sso", lambda org=org: check_sso(org))
         found += _guarded("discovery", lambda org=org: check_discovery(org))
+        found += _guarded("scim_tokens", lambda org=org: check_scim_tokens(org))
         found += _guarded("stored_dates", lambda org=org: check_stored_dates(org))
     return found
 

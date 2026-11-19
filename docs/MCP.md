@@ -231,7 +231,10 @@ expiry, keep writes off on the shared HTTP service unless the people using it ne
 Keep writes off for any client set to approve tool calls without asking: the confirm-first rule is an instruction to
 the model, and text in a tool result (a discovered app's name above all) is what an attacker would use to talk a
 model past it.
-Creating records, links and attachments is not offered: a create has no revision to guard it and is harder to undo cleanly than an edit.
+Creating records, links and attachments is not offered: a create has no revision to guard it and is harder to undo cleanly than an edit. Nothing about accounts is offered
+either: Softwarden refuses any API token on the routes that issue or change sign-in authority (invitations, password
+resets and changes, roles, single sign-on; docs/API.md, "Sign-in authority is session only"), so no tool could use
+them.
 
 ## Errors
 

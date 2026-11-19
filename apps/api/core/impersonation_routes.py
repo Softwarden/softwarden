@@ -133,10 +133,32 @@ if ee.INSTALLED:
     RESTRICTED["tokens"] += [("POST", "api/v1/scim/tokens"), ("POST", "api/v1/scim/tokens/<uuid:pk>/revoke")]
 RESTRICTED_ROUTES = frozenset(pair for pairs in RESTRICTED.values() for pair in pairs)
 
+# The routes of these categories issue or change sign-in authority (an invitation's link, a temporary
+# password, a role or the active flag, a provider identity pinned to an account, the organization's single sign-on,
+# your own password), so they need a signed-in session: core.drf.RolePermission refuses any API token on them (403),
+# whatever its role. A leaked Admin token would otherwise become a browser session that outlives the token. Closed
+# by default: a route added to these categories is session-only unless TOKEN_MAY_USE names it with its reason. Public
+# routes in them (sign-in itself, reset links, signup) are untouched: a token gives them nothing. The other
+# categories' routes that refuse tokens do so in their views (API and SCIM tokens, the calendar feed, the full export
+# and deletion: core.drf.SessionOnly / require_session). tests/test_account_authority.py walks every one with an
+# Admin's read-write token.
+SESSION_ONLY_CATEGORIES = ("passwords", "members", "identities and sign-in", "single sign-on settings")
+TOKEN_MAY_USE: dict[tuple[str, str], str] = {
+    ("DELETE", "api/v1/users/<int:pk>"): "removing a member takes authority away; offboarding scripts use it",
+    ("POST", "api/v1/people/<uuid:pk>/anonymize"): "a person record, not an account",
+    ("DELETE", "api/v1/users/<int:pk>/identity"): "unlinking takes a way in away; the next sign-in matches by email",
+    ("DELETE", "api/v1/users/<int:pk>/identities/<int:identity_id>"): "as above, one identity",
+}
+SESSION_ONLY_ROUTES = frozenset(
+    pair for category in SESSION_ONLY_CATEGORIES for pair in RESTRICTED[category] if pair not in TOKEN_MAY_USE
+)
+
 # Keys of an ALLOWED_WRITES route that are sign-in settings all the same: Organization settings carries
 # auto-provisioning for unknown single sign-on identities and SCIM's default role and group-to-role mapping, which
 # would outlive the impersonation. catalog/admin_services.update_organization refuses a body with any of them while
-# impersonating (/problems/impersonation-restricted, nothing written); its other keys stay ordinary support work.
+# impersonating (/problems/impersonation-restricted, nothing written); its other keys stay ordinary support work. The
+# same keys need a signed-in session: catalog/account_viewsets.OrganizationView refuses an API token a body
+# with any of them (403, nothing saved).
 RESTRICTED_SETTINGS = frozenset({"sso_auto_provision", "scim_default_role", "scim_role_groups"})
 RESTRICTED_SETTINGS_DETAIL = (
     "Sign-in settings (auto-provisioning and SCIM roles) aren't changed while impersonating someone: they stay with "

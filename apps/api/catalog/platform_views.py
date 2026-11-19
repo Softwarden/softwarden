@@ -979,6 +979,7 @@ class PlatformImpersonationView(PlatformView):
                 staff_second_factor.check_code(staff, self.payload().get("code"), "impersonation")
             platform_admin.start_impersonation(django_request, staff, self.payload())
         except org_lifecycle.ReauthenticationRequired:
+            platform_admin.audit_failed_reauthentication(staff)  # the count stays, as for any wrong password
             raise
         except Exception:
             signin_limits.release_account(staff.username)

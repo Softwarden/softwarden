@@ -403,10 +403,15 @@ def test_an_admin_cancels_during_the_grace_period(a, api):
     assert org_lifecycle.purge_due(timezone.now() + timedelta(days=60)) == {"purged": 0, "failed": 0}
 
 
-def test_asking_shares_the_sign_in_rate(a, api, settings):
+def test_asking_shares_the_sign_in_rate(a, api, settings, monkeypatch):
+    """The password counts with the account's failed sign-ins (core/signin_limits.py): five are free, then
+    each attempt waits, the right password included. The address's sign-in throttle applies as well."""
+    from core import counters, signin_limits
+
+    monkeypatch.setattr(counters, "clock", lambda: 1_800_000_000.0)  # held still: the wait never passes
     cloud(a["org"])
     client = api(a["users"]["admin"])
-    for _ in range(10):
+    for _ in range(signin_limits.ACCOUNT_FREE):
         assert (
             client.post("organization/deletion", {"confirm": "orga", "password": "nope-nope-nope"}).status_code == 403
         )

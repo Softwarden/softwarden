@@ -94,6 +94,18 @@ is refused with `403 /problems/read-only-token` ("This token is read-only."), be
 **Session only.** API tokens (`/api-tokens`) and calendar feeds (`/calendar-feed`) are credentials themselves, so they
 are managed from a signed-in session only: a token is refused there (403 `/problems/forbidden`), even on a read.
 
+**Sign-in authority is session only.** Any API token, read-write and Admin included, is refused (403
+`/problems/forbidden`, "This changes who can sign in ...") on every route that issues or changes sign-in authority,
+before the role check: `POST /users` and `POST /invitations` (the link), `POST /invitations/{id}/resend`, `POST
+/users/{id}/reset-password` (the temporary password), `PATCH /users/{id}` (role and active flag), `POST
+/pending-access/{id}/approve`, every write under `/sso/settings` (`PATCH`, `test`, `activate`, `disable`,
+`domains/verify`), `POST /auth/password`, and a `PATCH /organization` whose body has a sign-in setting
+(`sso_auto_provision`, `scim_default_role`, `scim_role_groups`; the whole body is refused and nothing is saved, while
+a body of other settings works with a token). A leaked token can otherwise become a browser session that outlives it.
+Reads of those resources, removing a member (`DELETE /users/{id}`), unlinking identities and anonymizing a person
+stay open to a token. The list is `core/impersonation_routes.SESSION_ONLY_ROUTES` (the sign-in categories of the
+impersonation list, minus `TOKEN_MAY_USE` with a reason for each).
+
 **Roles.** Every route declares its minimum role, and that declaration is what enforces it: Viewer reads,
 Editor writes, Admin deletes records and runs administration. The OpenAPI summary of an operation names the role where
 it isn't the default. A request that isn't signed in is `403 /problems/not-signed-in` (the session API has no
@@ -197,7 +209,8 @@ have an account" note), and an emailed invitation link creates a new account. Co
 account in its organization: it is deactivated, its username and email become `retired+<id>@invalid`, its sign-in
 identities are unlinked and its membership stays as history; that organization records `user.address_reclaimed`
 (the old account and `via`, never the new owner). `POST /users/{id}/reset-password` refuses an account with no
-password (`409`), so no Admin can give such an account a password (`GET /users` says which members have none:
+password (`409`), as it refuses your own account (change your own password with `POST /auth/password` instead),
+so no Admin can give such an account a password (`GET /users` says which members have none:
 `has_password` false, null for an account shared with another organization), and approving pending access for a platform staff
 account is `409 /problems/invitation-required`. Signed in as itself, such an account
 joins another organization only with the emailed invitation link (which records its proof); with the copy-once link
@@ -207,7 +220,10 @@ retiring it; the copy-once link's preview never does.
 
 **Deactivating a member** (`PATCH /users/{id} {active: false}`) ends every session the
 account has at once (`sessions_ended` in the `user.updated` event), so reactivating it later doesn't bring an old
-cookie back: the person signs in again. Their API tokens are not revoked: they are refused while the account is
+cookie back: the person signs in again. An Admin who is demoted, deactivated or removed loses
+what stood on their authority: the API tokens they made for other members and the invitations they made that are still
+open are revoked (`token.revoked` and `invitation.revoked` with `reason` `creator_no_longer_admin` or
+`creator_removed`; `api_access_revoked` and `invitations_revoked` in the event). Their API tokens are not revoked: they are refused while the account is
 inactive and work again on reactivation. When an account is deactivated because it was compromised, revoke its tokens
 too (`POST /api-tokens/{id}/revoke`) before reactivating it.
 
@@ -513,7 +529,10 @@ in parallel are decided one after the other. The first five cost nothing; after 
 it lapses only after 15 minutes with no attempt for that email, or when a sign-in succeeds. Ten failures take at
 least 31 seconds, the eleventh can't come within a minute of the first, and sustained guessing gets one try every 5
 minutes, however many addresses it comes from. Starting an impersonation counts the staff account's password the
-same way. Anyone who knows an email can make its owner wait up to 5 minutes between attempts (an accepted trade-off:
+same way, and so does every other check of a current password: changing your password (`POST
+/auth/password`, `current_password`) and asking for the organization's deletion (`POST /organization/deletion`,
+`password`) share the account's count with sign-in, a match forgets it, and each wrong one is audited as
+`user.password_check_failed` (the purpose, never the password). Anyone who knows an email can make its owner wait up to 5 minutes between attempts (an accepted trade-off:
 unknown emails wait the same, so the delay tells nobody which emails have accounts); an operator clears one account
 with `manage.py signin_limits forget <email> --reason ...`, audited in the platform stream.
 
@@ -941,19 +960,19 @@ too, and a read-only token is refused each one. Models that are intentionally no
 | Review, LinkConfirmation (`/reviews`, `/confirmations`) | create, list, retrieve | Evidence: recorded, never edited. |
 | Assessment (`/assessments`) | create, read, PATCH, status | Closed by status (`cancelled`, `closed`), never deleted: its snapshots are history. |
 | Person (`/people`) | create, read, PATCH, anonymize (Admin) | Deactivated or anonymized, never deleted: owners and reviews keep naming them. |
-| User membership (`/users`) | read, PATCH, DELETE, reset password, unlink identities | Members join by accepting an invitation (`POST /users` makes one, as `POST /invitations`). DELETE removes a membership only while the user belongs to another organization; otherwise deactivate. |
-| Invitation (`/invitations`) | create, list, retrieve, resend, revoke | Never edited; kept once accepted or revoked. The link is in the create and resend responses only. `POST /auth/invitations/preview {token}` and `POST /auth/invitations/accept {token, name?, password?}` serve the link's page (public, CSRF-checked, invitation throttle); the preview's `session` is `none`, `invitee`, `other_account` (accepting answers 409 `/problems/invitation-wrong-account`) or `other_sign_in` (the invited account signed in through another organization's SSO; accepting answers 409 `/problems/invitation-other-sign-in`); the token is never in a URL path because paths are logged. The link is `{BASE_URL}/invite#<token>`. |
+| User membership (`/users`) | read, PATCH (session only), DELETE, reset password (session only), unlink identities | Members join by accepting an invitation (`POST /users` makes one, as `POST /invitations`; session only). DELETE removes a membership only while the user belongs to another organization; otherwise deactivate. |
+| Invitation (`/invitations`) | create (session only), list, retrieve, resend (session only), revoke | Never edited; kept once accepted or revoked. The link is in the create and resend responses only. `POST /auth/invitations/preview {token}` and `POST /auth/invitations/accept {token, name?, password?}` serve the link's page (public, CSRF-checked, invitation throttle); the preview's `session` is `none`, `invitee`, `other_account` (accepting answers 409 `/problems/invitation-wrong-account`) or `other_sign_in` (the invited account signed in through another organization's SSO; accepting answers 409 `/problems/invitation-other-sign-in`); the token is never in a URL path because paths are logged. The link is `{BASE_URL}/invite#<token>`. |
 | OrgExport (`/organization/exports`) | create, list, retrieve, download (Admin) | Built by the worker; expires after 7 days (a nightly `backup` is kept by count instead). |
 | Organization deletion (`/organization/deletion`) | read, schedule (POST), cancel (DELETE) (Admin) | A state of the organization, not a record; the purge is the worker's. |
 | PendingSignup (`/auth/signup...`) | signup, resend, verify (public) | Installation-wide until confirmed; never readable. |
-| PendingAccess (`/pending-access`) | list, retrieve, approve, decline (DELETE) | Written by single sign-on while `sso_auto_provision` is on. |
+| PendingAccess (`/pending-access`) | list, retrieve, approve (session only), decline (DELETE) | Written by single sign-on while `sso_auto_provision` is on. |
 | ImportRun (`/imports`) | upload, read, PATCH, commit, cancel, rerun | Never deleted: the 30-day purge removes an import's data. |
 | Catalog-as-code (`/catalog-code/export.zip`, `/catalog-code/plan`, `/catalog-code/apply`) | export, plan, apply (Admin, `catalog_code`) | Not a model: the catalog as YAML files (see "Catalog as code" below). |
 | Tag (`/tags`) | list, retrieve, PATCH | Created and removed through a record's `tags`. |
 | Snooze (`/needs-attention/snoozes`) | create, read, DELETE | Replaced, not edited. |
 | ApiToken (`/api-tokens`) | create, list, retrieve, revoke (session only) | Revoked, never edited or deleted, so the audit log keeps naming them. |
-| SsoSettings (`/sso/settings`) | read, PATCH (the draft), activate, disable; test sign-in (session only); verify a sign-in domain (`POST /sso/settings/domains/verify {domain}`) | One per organization, never deleted. A provider, `okta_domain` or `discovery_url` change that moves the discovery document to another scheme, host or port needs `client_secret` in the same request (400 on `client_secret` otherwise). The test is a browser round trip, so it needs a signed-in session; a token is refused (403). The `saml` preset needs `sso.saml`, which no organization has in this release. `sign_in_domain_states` lists each sign-in domain as `verified` or `pending` (with `record_name`, `record_value` and `lapses_at`); with `SOFTWARDEN_SSO_DOMAIN_VERIFICATION` (cloud) a new domain is pending, finds no organization on the sign-in page, and is verified by its DNS TXT record; every refusal to verify is the same 400 on `domain`. |
-| Calendar feed (`/calendar-feed`) | create, read, rotate, revoke (session only) | A credential of its member. |
+| SsoSettings (`/sso/settings`) | read; PATCH (the draft), activate, disable, test sign-in and verify a sign-in domain (`POST /sso/settings/domains/verify {domain}`), every write session only | One per organization, never deleted. A provider, `okta_domain` or `discovery_url` change that moves the discovery document to another scheme, host or port needs `client_secret` in the same request (400 on `client_secret` otherwise). The test is a browser round trip, so it needs a signed-in session; a token is refused (403). The `saml` preset needs `sso.saml`, which no organization has in this release. `sign_in_domain_states` lists each sign-in domain as `verified` or `pending` (with `record_name`, `record_value` and `lapses_at`); with `SOFTWARDEN_SSO_DOMAIN_VERIFICATION` (cloud) a new domain is pending, finds no organization on the sign-in page, and is verified by its DNS TXT record; every refusal to verify is the same 400 on `domain`. |
+| Calendar feed (`/calendar-feed`) | create, read, rotate, revoke (session only) | A credential of its member. A password reset or change revokes the account's feeds (`calendar_feed.revoked` with `reason`), and no feed is served while the account must change its password. |
 | Connection (`/connections/microsoft`, `/connections/halo`, `/connections/okta` and `/connections/google_workspace`) | create, list, retrieve, PATCH, DELETE, test (Admin; Halo `discovery.halo`, Okta `discovery.okta`, Google Workspace `discovery.google`) | The secret (a client secret, an Okta private key, a Google service account key file) is write-only: `secret_set_on` says when it was replaced. Okta: `base_url`, `client_id`, `key_id`, `scope` (read-only Okta scopes). Google Workspace: `admin_email`; `client_id` and `service_account_email` are read from the key file. A changed sign-in value or secret raises `revision`; no connector runs until `test` passes again. A Halo or Okta `base_url` on another scheme, host or port needs `secret` in the same request (400 on `secret` otherwise). Delete is refused (409) while a connector uses it. |
 | Connector (`/connectors`) | CRUD, Run now, access check (Admin writes) | `POST /connectors/{id}/run` takes an optional body `{"accept_empty_listing": true}` (default false): this one run skips the empty-listing guard, so a listing that really came back empty (the last web app of a subscription, every agent of an environment) marks its observations no longer seen and removes their credentials. Recorded on the run (`counts.accept_empty_listing`) and the `connector.run_requested` audit event; scheduled runs never set it, and the next run is guarded again. Any other value is a 400. A run the guard refused has `failure_code: "empty_listing"`, so a client offers this without reading the error's words. |
 | Observation, ConnectorRun, DiscoveredCredential (`/discovery/...`) | read, decision actions | Written by discovery; link, create, dismiss, drift and missing actions are audited edits. |

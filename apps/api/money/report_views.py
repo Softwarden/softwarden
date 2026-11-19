@@ -21,7 +21,6 @@ from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from api.models import ApiToken
 from catalog import services
 from catalog.viewsets import csv_response
 from core import capabilities as caps
@@ -32,6 +31,7 @@ from core.drf import (
     VIEWER,
     ProblemSerializer,
     RoleAPIView,
+    SessionOnly,
     policy,
     public,
     refuse_unknown_params,
@@ -358,12 +358,8 @@ def feed_url(request, secret: str) -> dict[str, str]:
     return {"url": request.build_absolute_uri(FEED_PATH) + "?token=" + secret}
 
 
-class SessionOnly(RoleAPIView):
-    def check_permissions(self, request):
-        super().check_permissions(request)
-        # A method the route doesn't have answers 405 first, as on every route (core.drf.RolePermission).
-        if isinstance(request.auth, ApiToken) and getattr(self, request.method.lower(), None) is not None:
-            raise exceptions.PermissionDenied(SESSION_ONLY)
+class FeedView(SessionOnly, RoleAPIView):
+    session_only_detail = SESSION_ONLY
 
 
 FEED_DESCRIPTION = (
@@ -374,7 +370,7 @@ FEED_DESCRIPTION = (
 )
 
 
-class CalendarFeedView(SessionOnly):
+class CalendarFeedView(FeedView):
     role_policy = policy(VIEWER, VIEWER)
 
     @extend_schema(
@@ -414,7 +410,7 @@ class CalendarFeedView(SessionOnly):
         return Response(feed_json(None))
 
 
-class CalendarFeedRotateView(SessionOnly):
+class CalendarFeedRotateView(FeedView):
     role_policy = policy(VIEWER, VIEWER)
 
     @extend_schema(

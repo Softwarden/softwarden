@@ -210,8 +210,10 @@ def confirm_reset(data: dict[str, Any]):
     PasswordReset.objects.filter(user=user, used_at__isnull=True).update(used_at=now)
     Membership.objects.filter(user=user, must_change_password=True).update(must_change_password=False)
     audit_account(user, user, "user.password_reset_completed", {"user": user.id})
+    from .admin_services import revoke_calendar_feeds  # admin_services imports this module
     from .invitations import record_proof  # invitations imports admin_services, which imports this module
 
+    revoke_calendar_feeds(user, user, "password_reset")  # The feeds' secret URLs go with the old password
     record_proof(user, "password_reset")
     return user
 

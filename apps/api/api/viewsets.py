@@ -9,10 +9,10 @@ from datetime import date
 
 from django.db import transaction
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import exceptions, status
+from rest_framework import status
 from rest_framework.decorators import action
 
-from core.drf import ADMIN, PROBLEMS, TenantViewSet, policy, revision
+from core.drf import ADMIN, PROBLEMS, SessionOnly, TenantViewSet, policy, revision
 from core.input import whole_number
 from core.models import Membership
 from core.problems import FieldErrors
@@ -84,19 +84,14 @@ def parse_token(org, data) -> tuple[Membership, str, bool, date]:
         responses={200: ApiTokenSerializer, **{c: PROBLEMS[c] for c in (400, 403, 404)}},
     ),
 )
-class ApiTokenViewSet(TenantViewSet):
+class ApiTokenViewSet(SessionOnly, TenantViewSet):
     role_policy = policy(ADMIN)
+    session_only_detail = SESSION_ONLY
     pagination_class = None
     serializer_class = ApiTokenSerializer
     input_serializer_class = ApiTokenInputSerializer
     ordering_fields = ("created_at", "name", "expires_on")
     default_ordering = ("-created_at",)
-
-    def check_permissions(self, request):
-        super().check_permissions(request)
-        # A method the route doesn't have answers 405 first, as on every route (core.drf.RolePermission).
-        if isinstance(request.auth, ApiToken) and getattr(self, request.method.lower(), None) is not None:
-            raise exceptions.PermissionDenied(SESSION_ONLY)
 
     def base_queryset(self):
         return ApiToken.objects.select_related("user", "created_by")

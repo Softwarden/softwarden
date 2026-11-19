@@ -12,7 +12,7 @@
  *    explained first. While scheduled: the date, the final export and Cancel the deletion. */
 import { forwardRef, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { byteSize, LIMIT_NAME, limitAmount, limitName, limitVerb, Problem, REAUTHENTICATION_REQUIRED, when } from "@/api";
+import { byteSize, LIMIT_NAME, limitAmount, limitName, limitVerb, Problem, REAUTHENTICATION_REQUIRED, tooManyAttempts, when } from "@/api";
 import { EmptyState, ErrorBanner, ErrorSummary, Field, Loading, PageHead, TableRegion } from "@/components/app";
 import { orgDate } from "@/components/org-banners";
 import { chip, SuccessNote } from "@/components/sw";
@@ -323,7 +323,7 @@ function DeleteForm({ graceDays, backupDays, onCancel, onDone }: { graceDays: nu
       if (err instanceof Problem && err.type === REAUTHENTICATION_REQUIRED) return setErrors({ password: [err.detail] });
       if (err instanceof Problem && Object.keys(err.errors).length) return setErrors(err.errors);
       setErrors({});
-      setBanner(err instanceof Problem && err.status === 429 ? "Too many attempts. Wait a minute, then try again." : problemText(err, "Couldn't schedule the deletion."));
+      setBanner(err instanceof Problem && err.status === 429 ? tooManyAttempts(err.retryAfter) : problemText(err, "Couldn't schedule the deletion."));
     }
   }
   return (

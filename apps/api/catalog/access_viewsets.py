@@ -18,7 +18,7 @@ from django.contrib.auth import login
 from django.db import transaction
 from django.db.models import Q
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
-from rest_framework import exceptions, status
+from rest_framework import status
 from rest_framework.decorators import action, api_view, throttle_classes
 from rest_framework.response import Response
 
@@ -35,6 +35,7 @@ from core.drf import (
     etag,
     policy,
     public,
+    require_session,
     revision,
     set_location,
     text,
@@ -110,14 +111,15 @@ class InvitationFilterSet(TenantFilterSet):
     list=extend_schema(summary="Invitations (Admin)"),
     retrieve=extend_schema(summary="Get an invitation (Admin); never its link"),
     create=extend_schema(
-        summary="Invite someone by email (Admin)",
+        summary="Invite someone by email (Admin, signed-in session)",
         description="Returns the invitation with its link, in this response only, and emails the link to the invitee "
         "when the installation can send email (`emailed`). Nobody is added yet: a new account "
         "is created, or an existing one joins, when they accept through the link. On an installation with more than "
         "one organization (or in cloud mode) the link returned here joins an existing account (signed in as itself) "
         "but creates none: only the emailed link, which proves the mailbox, does. A live invitation for the same "
         "email is replaced (revoked). Refused (400) for a member of this organization; the answer is otherwise the "
-        "same whether or not the email has an account elsewhere.",
+        "same whether or not the email has an account elsewhere. An API token is refused (403): an invitation issues "
+        "sign-in authority.",
         request=InviteInputSerializer,
         responses={201: InvitationCreatedSerializer, **WRITE_ERRORS},
     ),
@@ -127,9 +129,9 @@ class InvitationFilterSet(TenantFilterSet):
         responses={200: InvitationSerializer, **WRITE_ERRORS},
     ),
     resend=extend_schema(
-        summary="Make a new link for an invitation (Admin)",
+        summary="Make a new link for an invitation (Admin, signed-in session)",
         description="The old link stops working; the invitation is good for 7 days from now. The link is in this "
-        "response only, and emailed as on create.",
+        "response only, and emailed as on create. An API token is refused (403).",
         request=None,
         responses={200: InvitationCreatedSerializer, **WRITE_ERRORS},
     ),
@@ -207,11 +209,11 @@ class PendingAccessFilterSet(TenantFilterSet):
     list=extend_schema(summary="Pending access requests (Admin)"),
     retrieve=extend_schema(summary="Get a pending access request (Admin)"),
     approve=extend_schema(
-        summary="Approve a pending access request with a role (Admin)",
+        summary="Approve a pending access request with a role (Admin, signed-in session)",
         description="Creates the account (no password: they sign in with single sign-on), its membership and the "
         "pinned identity, or only pins the identity for someone already a member here. Any other account with this "
         "email (in another organization, or in none) is 409 /problems/invitation-required: invite them instead. "
-        "Returns the member.",
+        "Returns the member. An API token is refused (403).",
         request=ApprovePendingInputSerializer,
         responses={200: MemberSerializer, **WRITE_ERRORS},
     ),
@@ -390,8 +392,7 @@ def invitation_preview(request):
 @throttle_classes([ScopedThrottle])
 @public
 def invitation_accept(request):
-    if access.pinned_organization_id(request) is not None:
-        raise exceptions.PermissionDenied("Accept an invitation from a browser, not with an API token.")
+    require_session(request, "Accept an invitation from a browser, not with an API token.")
     found, proven, data = _live(request)
     token = data["token"]
     user = request.user if request.user.is_authenticated else None

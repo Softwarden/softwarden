@@ -47,6 +47,7 @@ import logging
 import os
 import shutil
 import zipfile
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -588,13 +589,23 @@ def grace() -> timedelta:
     return timedelta(days=max(MIN_GRACE_DAYS, int(settings.SOFTWARDEN_ORG_DELETION_GRACE_DAYS)))
 
 
-def reauthenticate(user, password: Any, authenticated_at=None, now=None) -> None:
+def reauthenticate(user, password: Any, authenticated_at=None, now=None, *, counted_by_caller: bool = False) -> None:
     """The person asking is the account's owner now: its password, or for an account with no usable password (single
     sign-on only) this session's own sign-in within REAUTH_WINDOW (`authenticated_at`, core/access.authenticated_at;
     the account's `last_login` would count a sign-in from another browser). 403 /problems/reauthentication-required
-    otherwise."""
+    otherwise.
+
+    The password check counts with the account's sign-in attempts and audits a failure (admin_services.check_current_password), in its own transaction: call this outside any transaction. Only a caller
+    that already counts the attempt around its whole request sets `counted_by_caller` (the platform's impersonation
+    start, catalog/platform_views.ImpersonationView, which counts the staff account's second factor with it)."""
     if user.has_usable_password():
-        if not isinstance(password, str) or not password or not user.check_password(password):
+        if counted_by_caller:
+            matched = isinstance(password, str) and bool(password) and user.check_password(password)
+        else:
+            from .admin_services import check_current_password  # admin_services sits above this module
+
+            matched = check_current_password(user, password, "reauthentication")
+        if not matched:
             raise ReauthenticationRequired("Enter your current password to confirm.")
         return
     now = now or timezone.now()
@@ -608,16 +619,33 @@ def deletion_export(org) -> OrgExport | None:
     return OrgExport.objects.filter(organization=org, purpose=ExportPurpose.DELETION).order_by("-created_at").first()
 
 
-@transaction.atomic
-def request_deletion(org, actor, data: dict[str, Any], authenticated_at=None) -> Organization:
-    """Schedule the organization's deletion after the grace period and queue its final export."""
+def request_deletion(
+    org, actor, data: dict[str, Any], authenticated_at=None, then: Callable[[Organization], None] | None = None
+) -> Organization:
+    """Schedule the organization's deletion after the grace period and queue its final export. The checks that need
+    no lock come first, then the re-authentication in its own transaction (a failed password stays counted and
+    audited), then the write in one transaction under the organization's lock, which checks again. `then`
+    (the view's response) runs inside that transaction, so a response that fails to render writes nothing."""
     require_capability(org, ORG_SELF_DELETE)
-    org = Organization.objects.select_for_update().get(pk=org.pk)
+    _check_deletion_request(Organization.objects.get(pk=org.pk), data)
+    reauthenticate(actor, data.get("password"), authenticated_at)
+    with transaction.atomic():
+        org = _schedule_deletion(org, actor, data)
+        if then is not None:
+            then(org)
+        return org
+
+
+def _check_deletion_request(org, data: dict[str, Any]) -> None:
     if org.deletion_due_at is not None:
         raise Conflict("This organization's deletion is already scheduled.")
     if data.get("confirm") != org.slug:
         raise FieldErrors({"confirm": [f"Type the organization's slug, {org.slug}, exactly to confirm."]})
-    reauthenticate(actor, data.get("password"), authenticated_at)
+
+
+def _schedule_deletion(org, actor, data: dict[str, Any]) -> Organization:
+    org = Organization.objects.select_for_update().get(pk=org.pk)
+    _check_deletion_request(org, data)  # again under the lock: another Admin may have asked meanwhile
     now = timezone.now()
     org.deletion_requested_at = now
     org.deletion_due_at = now + grace()

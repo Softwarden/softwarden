@@ -440,10 +440,12 @@ PARTIAL: dict[str, str] = {
     "WebhookDeliveryViewSet": "Webhook deliveries are written by the worker; an Admin resends one.",
     "FailureViewSet": "Data-quality failures are computed from the records: read.",
     "UserViewSet": "Members join by accepting an invitation (InvitationViewSet; POST users makes one); here list, "
-    "retrieve, PATCH role and active, remove, reset a password and unlink identities.",
+    "retrieve, PATCH role and active, remove, reset a password and unlink identities. Inviting, PATCH and the reset "
+    "need a signed-in session (Sign-in authority).",
     "InvitationViewSet": "Created, listed, read, resent and revoked; never edited, and kept once revoked or accepted so "
-    "the audit log keeps naming them.",
-    "PendingAccessViewSet": "Requests come from single sign-on; an Admin approves (with a role) or declines (deletes).",
+    "the audit log keeps naming them. Creating and resending need a signed-in session.",
+    "PendingAccessViewSet": "Requests come from single sign-on; an Admin approves (with a role, signed-in session only) "
+    "or declines (deletes).",
     "OrgExportViewSet": "Asked for (POST) and built by the worker, then downloaded; never edited, and expires "
     "on its own after 7 days (tests/test_org_lifecycle.py).",
 }
@@ -457,8 +459,7 @@ SINGLETONS: dict[str, tuple[str, dict[str, Any]]] = {
         {"transport": "smtp", "smtp_host": "smtp.example.test", "from_address": "it@example.test"},
     ),
     "assistant/settings": ("admin", {"monthly_cap_usd": "15.00"}),
-    "sso/settings": ("admin", {"provider": "okta"}),
-}
+}  # sso/settings is read with a token and written from a session only (test_single_sign_on_with_a_token)
 
 ROLES = ("viewer", "editor", "admin")
 LEVEL = {role: i for i, role in enumerate(ROLES)}
@@ -947,27 +948,40 @@ def test_backup_key_acknowledgement_with_a_token(world, settings, tmp_path):
     assert action(admin, reader, "system/backup/acknowledge-key")["key_acknowledged"] is True
 
 
+SIGN_IN_AUTHORITY = "This changes who can sign in"  # the start of core.drf.SIGN_IN_AUTHORITY
+
+
+def session_only(response) -> None:
+    """403 /problems/forbidden for a token on a route that issues or changes sign-in authority."""
+    body = problem(response, 403, "/problems/forbidden")
+    assert body["detail"].startswith(SIGN_IN_AUTHORITY), body
+
+
 def test_single_sign_on_with_a_token(world):
-    """An Admin token activates a tested draft and turns single sign-on off; the test sign-in is a browser round trip
-    and needs a signed-in session (tests/test_sso.py covers the flow)."""
+    """An Admin token reads the single sign-on settings but changes nothing about them (Pointing sign-in at
+    another identity provider would turn a leaked token into sessions); a read-only token is refused as read-only.
+    tests/test_sso.py covers the writes from a session."""
     from core.models import SsoSettings
     from tests.sso_helpers import activate as set_up
 
     admin, reader = TokenClient(world, "admin"), TokenClient(world, "admin", read_only=True)
     row = set_up(world["org"], "okta")
     SsoSettings.objects.filter(pk=row.pk).update(draft_test_ok=True, draft_tested_revision=row.draft_revision)
-    body = problem(admin.call("post", "sso/settings/test", {"draft_revision": row.draft_revision}), 403)
-    assert body["detail"] == "Run a test sign-in from a signed-in browser session, not with a token."
+    first = admin.call("get", "sso/settings")
+    assert ok(first)["status"] == "active"
     revision = {"draft_revision": row.draft_revision}
-    assert action(admin, reader, "sso/settings/activate", revision)["status"] == "active"
+    session_only(admin.call("patch", "sso/settings", {"provider": "okta"}, HTTP_IF_MATCH=first["ETag"]))
+    for path, body in (("test", revision), ("activate", revision), ("disable", {})):
+        problem(reader.call("post", f"sso/settings/{path}", body), 403, "/problems/read-only-token")
+        session_only(admin.call("post", f"sso/settings/{path}", body))
     problem(TokenClient(world, "editor").call("post", "sso/settings/disable"), 403, "/problems/forbidden")
-    assert action(admin, reader, "sso/settings/disable")["status"] == "disabled"
+    assert ok(admin.call("get", "sso/settings"))["status"] == "active"  # nothing changed
 
 
 def test_verifying_a_sign_in_domain_with_a_token(world, settings):
-    """An Admin token verifies a pending sign-in domain once its TXT record is published; a read-only or Editor
-    token can't."""
-    from core import dns_txt
+    """A verified sign-in domain routes sign-ins, so verifying one needs a signed-in session: an Admin token is
+    refused, a read-only token as read-only; the Admin's session verifies it."""
+    from core import dns_txt, sso
     from tests.sso_helpers import activate as set_up
 
     settings.SOFTWARDEN_SSO_DOMAIN_VERIFICATION = True
@@ -975,33 +989,45 @@ def test_verifying_a_sign_in_domain_with_a_token(world, settings):
     dns_txt.SIMULATED.clear()
     admin, reader = TokenClient(world, "admin"), TokenClient(world, "admin", read_only=True)
     set_up(world["org"], "okta")
-    claimed = ok(admin.call("patch", "sso/settings", {"sign_in_domains": ["token-verify.example"]}))
+    sso.update_draft(world["org"], world["users"]["admin"], {"sign_in_domains": ["token-verify.example"]})
+    claimed = ok(admin.call("get", "sso/settings"))
     state = next(s for s in claimed["sign_in_domain_states"] if s["domain"] == "token-verify.example")
     assert state["status"] == "pending"
     dns_txt.SIMULATED[state["record_name"]] = [state["record_value"]]
     body = {"domain": "token-verify.example"}
-    problem(TokenClient(world, "editor").call("post", "sso/settings/domains/verify", body), 403, "/problems/forbidden")
     try:
-        assert action(admin, reader, "sso/settings/domains/verify", body)["status"] == "verified"
+        problem(reader.call("post", "sso/settings/domains/verify", body), 403, "/problems/read-only-token")
+        session_only(admin.call("post", "sso/settings/domains/verify", body))
+        session = Client()
+        session.force_login(world["users"]["admin"])
+        verified = session.post(
+            "/api/v1/sso/settings/domains/verify", json.dumps(body), content_type="application/json"
+        )
+        assert verified.status_code == 200 and verified.json()["status"] == "verified"
     finally:
         dns_txt.SIMULATED.clear()
 
 
 def test_invitations_pending_access_and_members_with_a_token(world):
-    """The write actions of the PARTIAL account viewsets: invite, resend, revoke, approve, decline, and a
-    member's PATCH with If-Match."""
+    """The write actions of the PARTIAL account viewsets with a token: what issues or changes sign-in
+    authority (invite, resend, approve, a member's PATCH, a password reset) is refused to any token; what takes
+    it away (revoking an invitation, declining a request) and the reads still work."""
     from django.utils import timezone
 
-    from core.models import PendingAccess
+    from catalog import invitations
+    from core.models import Invitation, PendingAccess
 
     admin, reader = TokenClient(world, "admin"), TokenClient(world, "admin", read_only=True)
     body = {"email": "by.token@orga.test", "role": "viewer"}
     problem(reader.call("post", "invitations", body), 403, "/problems/read-only-token")
     problem(TokenClient(world, "editor").call("post", "invitations", body), 403, "/problems/forbidden")
-    made = ok(admin.call("post", "invitations", body), 201)
-    assert "/invite#" in made["link"]
-    assert action(admin, reader, f"invitations/{made['id']}/resend", {})["link"] != made["link"]
-    assert action(admin, reader, f"invitations/{made['id']}/revoke", {})["status"] == "revoked"
+    session_only(admin.call("post", "invitations", body))
+    session_only(admin.call("post", "users", body))
+    assert not Invitation.objects.filter(email="by.token@orga.test").exists()
+    made, _ = invitations.create_invitation(world["org"], world["users"]["admin"], body)
+    session_only(admin.call("post", f"invitations/{made.id}/resend", {}))
+    assert ok(admin.call("get", f"invitations/{made.id}"))["status"] == "pending"
+    assert action(admin, reader, f"invitations/{made.id}/revoke", {})["status"] == "revoked"
     now = timezone.now()
     rows = [
         PendingAccess.objects.create(
@@ -1010,15 +1036,15 @@ def test_invitations_pending_access_and_members_with_a_token(world):
         )
         for s in ("approve", "decline")
     ]  # fmt: skip
-    member = action(admin, reader, f"pending-access/{rows[0].id}/approve", {"role": "viewer"})
+    problem(reader.call("post", f"pending-access/{rows[0].id}/approve", {"role": "viewer"}), 403)
+    session_only(admin.call("post", f"pending-access/{rows[0].id}/approve", {"role": "viewer"}))
     problem(reader.call("delete", f"pending-access/{rows[1].id}"), 403, "/problems/read-only-token")
     assert admin.call("delete", f"pending-access/{rows[1].id}").status_code == 204
-    detail = f"users/{member['id']}"
+    detail = f"users/{world['users']['viewer'].id}"
     tag = admin.call("get", detail)["ETag"]
-    changed = admin.call("patch", detail, {"role": "editor"}, HTTP_IF_MATCH=tag)
-    assert ok(changed)["role"] == "editor"
-    problem(admin.call("patch", detail, {"role": "viewer"}, HTTP_IF_MATCH=tag), 412, "/problems/precondition-failed")
-    assert ok(admin.call("patch", detail, {"active": False}, HTTP_IF_MATCH=changed["ETag"]))["active"] is False
+    session_only(admin.call("patch", detail, {"role": "admin"}, HTTP_IF_MATCH=tag))
+    session_only(admin.call("post", f"{detail}/reset-password", {}))
+    assert ok(admin.call("get", detail))["role"] == "viewer"
 
 
 def test_end_of_life_tracking_with_a_token(world):

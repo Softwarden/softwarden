@@ -134,6 +134,7 @@ LABELS = {
     "user.password_reset_completed": "Password reset by email link",
     "user.login": "Sign-in",
     "user.login_failed": "Sign-in failed",
+    "user.password_check_failed": "Current password refused",
     "user.organization_switched": "Switched organization",
     "user.removed": "Removed from organization",
     "export": "Exported",

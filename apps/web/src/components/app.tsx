@@ -222,13 +222,13 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
 }
 
 /** Run a write; return field errors or the problem detail instead of throwing. */
-export async function attempt(fn: () => Promise<unknown>): Promise<{ errors: Record<string, string[]>; detail: string; status?: number } | null> {
+export async function attempt(fn: () => Promise<unknown>): Promise<{ errors: Record<string, string[]>; detail: string; status?: number; retryAfter?: number } | null> {
   try {
     await fn();
     return null;
   } catch (e) {
     // `status`: a 412 (the record changed since it was read) shows the form's "Load the latest version".
-    if (e instanceof Problem) return { errors: e.errors, detail: e.detail, status: e.status };
+    if (e instanceof Problem) return { errors: e.errors, detail: e.detail, status: e.status, retryAfter: e.retryAfter };
     return { errors: {}, detail: "Something went wrong. Try again." };
   }
 }

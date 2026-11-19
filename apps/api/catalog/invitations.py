@@ -560,6 +560,25 @@ def revoke_invitation(org, actor, invitation: Invitation) -> Invitation:
     return invitation
 
 
+def revoke_created_by(org, actor, creator, reason: str) -> int:
+    """Revoke every invitation `creator` made in `org` that is still open (not accepted or revoked; an
+    expired one too, since a resend would revive it), when the creator stops being an active Admin there: an
+    invitation stands on its creator's authority, as the API tokens they made for others do
+    (api/tokens.revoke_created_for_others). Each is audited as invitation.revoked with the reason. Returns how many.
+    Runs in the caller's transaction."""
+    now = timezone.now()
+    count = 0
+    open_ = Invitation.objects.select_for_update(of=("self",)).filter(
+        organization=org, invited_by=creator, accepted_at__isnull=True, revoked_at__isnull=True
+    )
+    for invitation in open_.order_by("created_at", "id"):
+        invitation.revoked_at = now
+        invitation.save(update_fields=["revoked_at", "updated_at"])
+        audit(org, actor, "invitation.revoked", invitation, {"email": mask_email(invitation.email), "reason": reason})
+        count += 1
+    return count
+
+
 @transaction.atomic
 def resend_invitation(org, actor, invitation: Invitation) -> tuple[Invitation, str]:
     """A new token (the old link stops working) and a fresh expiry, for an invitation not yet used or revoked. The

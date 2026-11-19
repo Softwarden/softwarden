@@ -282,6 +282,13 @@ function limitDetail(data: Record<string, unknown>, detail: string) {
   return `Limit reached: ${limitName(data.limit)}, ${limitUsage(data.limit, data.usage, data.maximum)}. ${detail}`;
 }
 
+/** "Too many attempts. Try again in 3 minutes.", from a 429's Retry-After (seconds, when the API sent one). */
+export function tooManyAttempts(retryAfter?: number) {
+  if (!retryAfter) return "Too many attempts. Wait a few minutes, then try again.";
+  if (retryAfter < 120) return `Too many attempts. Try again in ${retryAfter} ${retryAfter === 1 ? "second" : "seconds"}.`;
+  return `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes.`;
+}
+
 /** The Problem for an error answer, from every request path (api(), apiWithEtag(), uploads): a limit-reached problem's
  *  detail names the limit, usage and maximum, so every screen that shows `detail` says it; problems the shell acts on
  *  are sent as PROBLEM_EVENT too. */

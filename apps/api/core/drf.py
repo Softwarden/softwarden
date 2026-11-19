@@ -16,7 +16,9 @@ members are refused on every membership route (/problems/organization-suspended)
 `allowed_when_suspended`.
 The organization and role always come from core.access, never from the client. A read-only API token is refused
 on any write to a signed-in route (403 "This token is read-only.") before the role check; public routes don't refuse
-it, and a method the route doesn't have answers 405 first.
+it, and a method the route doesn't have answers 405 first. Any API token is refused (403) on a route that issues or
+changes sign-in authority (core/impersonation_routes.SESSION_ONLY_ROUTES): a leaked token must not become a
+browser session that outlives it. `SessionOnly` and `require_session` refuse tokens on other session-only routes.
 
 `TenantViewSet` is the base for every model viewset:
 
@@ -153,6 +155,8 @@ class RolePermission(permissions.BasePermission):
         token = request.auth
         if getattr(token, "read_only", False) and request.method not in SAFE:
             raise ReadOnlyToken()
+        if is_token_request(request) and session_only_route(request):
+            raise exceptions.PermissionDenied(SIGN_IN_AUTHORITY)  # Before the role, for any role
         if role == ACCOUNT:
             return True
         membership = access.current_membership(request)  # 403 without one, or while the password must change
@@ -164,6 +168,49 @@ class RolePermission(permissions.BasePermission):
         if capability:
             require_capability(membership.organization, capability)
         return True
+
+
+# ---- signed-in sessions only ----------------------------------------------------------------------------------------
+
+SESSION_ONLY = "This needs a signed-in session, not an API token."
+SIGN_IN_AUTHORITY = (
+    "This changes who can sign in, so it needs a signed-in session, not an API token. Do it in Softwarden itself."
+)
+
+
+def is_token_request(request) -> bool:
+    """Whether the request is authenticated by an API token rather than a session: a token is an auth object tied to
+    one organization (core/access.pinned_organization_id); a session request has no auth object."""
+    return access.pinned_organization_id(request) is not None
+
+
+def require_session(request, detail: str = SESSION_ONLY) -> None:
+    """403 with `detail` for a request authenticated by an API token."""
+    if is_token_request(request):
+        raise exceptions.PermissionDenied(detail)
+
+
+def session_only_route(request) -> bool:
+    """Whether the request's (method, route) issues or changes sign-in authority (core/impersonation_routes
+    .SESSION_ONLY_ROUTES), which RolePermission refuses to an API token."""
+    from .impersonation_routes import SESSION_ONLY_ROUTES
+
+    match = getattr(request, "resolver_match", None)
+    route = getattr(match, "route", None)
+    return route is not None and (request.method, route) in SESSION_ONLY_ROUTES
+
+
+# Mixin, before TenantViewSet or RoleAPIView: every method the view has needs a signed-in session; an API token is
+# refused with `session_only_detail` (403). Checked after the role (signed out, a read-only token's write and a role
+# refusal answer first) and only for a method the view has (405 first, as on every route). A comment, not a docstring:
+# a view's inherited docstring becomes its OpenAPI description.
+class SessionOnly:
+    session_only_detail: ClassVar[str] = SESSION_ONLY
+
+    def check_permissions(self, request):
+        super().check_permissions(request)  # type: ignore[misc]
+        if getattr(self, request.method.lower(), None) is not None:
+            require_session(request, self.session_only_detail)
 
 
 def _check_order(func: Any, name: str) -> None:

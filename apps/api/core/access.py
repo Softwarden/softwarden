@@ -128,6 +128,17 @@ def org_role(request):
     return membership.organization, membership.role
 
 
+def is_active_admin(user_id, organization_id) -> bool:
+    """Whether the account is an active Admin of the organization now. A credential made on an Admin's authority (an
+    API token made for someone else, a SCIM token: api/tokens.py, ee/scim/tokens.py) works only while its creator
+    still is one. None (no creator) is not an Admin."""
+    if user_id is None:
+        return False
+    return Membership.objects.filter(
+        user_id=user_id, user__is_active=True, organization_id=organization_id, role=Role.ADMIN
+    ).exists()
+
+
 def require_write(role):
     if role not in WRITE_ROLES:
         raise exceptions.PermissionDenied("Editors and Admins can make changes; your role is Viewer.")

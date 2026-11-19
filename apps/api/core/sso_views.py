@@ -11,16 +11,20 @@ audit event carries them; `secret_set` and `secret_set_at` say whether and since
 
 The `saml` preset (capability `sso.saml` on top of `sso.oidc`, from the optional `ee` package) has its own values on both sides
 (`idp_entity_id`, `idp_sso_url`, `idp_certificates`, `label`) and `saml` gives the organization's service provider
-addresses to register with the identity provider; `idp_metadata_xml` (write-only) imports the IdP's values once."""
+addresses to register with the identity provider; `idp_metadata_xml` (write-only) imports the IdP's values once.
+
+Every write here needs a signed-in session: an API token is refused (403, core/impersonation_routes
+.SESSION_ONLY_ROUTES), since pointing sign-in at another identity provider would turn a leaked token into
+sessions."""
 
 from typing import Any
 
 from django.db import transaction
 from drf_spectacular.utils import extend_schema
-from rest_framework import exceptions, serializers
+from rest_framework import serializers
 from rest_framework.response import Response
 
-from . import access, credentials, oidc, sso
+from . import credentials, oidc, sso
 from .capabilities import SSO_OIDC, SSO_SAML, ee_installed, has_capability
 from .drf import (
     ADMIN,
@@ -33,6 +37,7 @@ from .drf import (
     policy,
     refuse_unknown_params,
     require_match,
+    require_session,
     revision,
     timestamp,
 )
@@ -305,7 +310,7 @@ class SsoSettingsView(SsoView):
         return self.respond()
 
     @extend_schema(
-        summary="Change the single sign-on draft and the sign-in domains (Admin)",
+        summary="Change the single sign-on draft and the sign-in domains (Admin, signed-in session)",
         description="Saving a change to the draft bumps draft.revision, which invalidates its test; sign-in keeps "
         "using the active configuration until a tested draft is activated. client_secret is write-only: send it "
         "only to replace it. Presets compute the discovery URL and issuer: entra from tenant_id, okta from "
@@ -340,8 +345,7 @@ class SsoTestView(SsoView):
         responses={200: SsoTestStartSerializer, **WRITE_ERRORS},
     )
     def post(self, request):
-        if access.pinned_organization_id(request) is not None:
-            raise exceptions.PermissionDenied("Run a test sign-in from a signed-in browser session, not with a token.")
+        require_session(request, "Run a test sign-in from a signed-in browser session, not with a token.")
         data = self.payload()
         org = self.organization
         started = sso.start_test(org, request.user, request.session, data.get("draft_revision"))
@@ -353,7 +357,7 @@ class SsoTestView(SsoView):
 
 class SsoActivateView(SsoView):
     @extend_schema(
-        summary="Activate the tested draft (Admin)",
+        summary="Activate the tested draft (Admin, signed-in session)",
         description="Only a draft whose test of its current revision passed can be activated (409 "
         "/problems/sso-test-required otherwise). Sign-ins in progress must start again. Password sign-in is "
         "unchanged.",
@@ -368,7 +372,7 @@ class SsoActivateView(SsoView):
 
 class SsoDisableView(SsoView):
     @extend_schema(
-        summary="Turn single sign-on off for this organization (Admin)",
+        summary="Turn single sign-on off for this organization (Admin, signed-in session)",
         description="Members sign in with their passwords; the installation's legacy SOFTWARDEN_OIDC_* isn't used "
         "either. Activate a tested draft to turn it on again.",
         request=None,
@@ -381,7 +385,7 @@ class SsoDisableView(SsoView):
 
 class SsoDomainVerifyView(SsoView):
     @extend_schema(
-        summary="Verify a pending sign-in domain by its DNS TXT record (Admin)",
+        summary="Verify a pending sign-in domain by its DNS TXT record (Admin, signed-in session)",
         description="Looks up the TXT record `record_name` of one of sign_in_domains and, when it carries "
         "`record_value` and no other organization holds the domain, marks it verified: it then finds this "
         "organization on the sign-in page. Every refusal (no record yet, a DNS failure, a domain held elsewhere) is "

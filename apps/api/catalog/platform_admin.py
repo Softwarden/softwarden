@@ -45,7 +45,7 @@ from core.request_context import acting_via, current_request_id, forget_organiza
 
 from . import org_lifecycle
 from .redaction import redact
-from .services import audit
+from .services import audit, audit_account
 
 REASON_MAX = 500
 
@@ -55,6 +55,7 @@ PLATFORM_ACTIONS = {
     "staff.revoked": "Platform staff revoked",
     "staff.signed_in": "Platform staff signed in",
     "staff.sign_in_failed": "Platform staff sign-in failed",
+    "staff.password_check_failed": "Platform staff password refused",
     "staff.second_factor_enrollment_started": "Second factor enrollment started",
     "staff.second_factor_enrolled": "Second factor set up",
     "staff.second_factor_verified": "Second factor code accepted",
@@ -468,6 +469,19 @@ def impersonation_minutes() -> int:
 
 
 @transaction.atomic
+def audit_failed_reauthentication(staff) -> None:
+    """A wrong staff password when starting an impersonation is audited like every other wrong current password
+    (catalog/admin_services.check_current_password): in the platform stream, and as user.password_check_failed in each
+    organization the account belongs to. The view calls this after start_impersonation's transaction rolled back, so it
+    stays written; an SSO-only account's stale sign-in checked no password and isn't recorded."""
+    if not staff.has_usable_password():
+        return
+    details = {"user": staff.pk, "purpose": "impersonation"}
+    platform_audit(staff, "staff.password_check_failed", details=details)
+    audit_account(staff, staff, "user.password_check_failed", details)
+
+
+@transaction.atomic
 def start_impersonation(request, staff, data: dict[str, Any]) -> dict[str, Any]:
     """Start impersonating a member: re-authentication (the staff password, or a single sign-on sign-in in this session
     within 15 minutes), a reason, the member's id and organization. Audited in both streams; then the session switches
@@ -492,7 +506,8 @@ def start_impersonation(request, staff, data: dict[str, Any]) -> dict[str, Any]:
         errors["user_id"] = ["Choose a member by their user ID."]
     if errors or org is None or not isinstance(user_id, int):
         raise FieldErrors(errors)
-    org_lifecycle.reauthenticate(staff, data.get("password"), authenticated_at(request))
+    # Counted around the whole request by the view (platform_views.ImpersonationView), with the second factor.
+    org_lifecycle.reauthenticate(staff, data.get("password"), authenticated_at(request), counted_by_caller=True)
     membership = Membership.objects.select_related("user").filter(organization=org, user_id=user_id).first()
     if membership is None:
         raise FieldErrors({"user_id": ["This account isn't a member of that organization."]})

@@ -330,9 +330,14 @@ def test_password_change_racing_a_key_change_answers_400_and_keeps_the_password(
     old = key(client)
     original = admin_services.change_password
 
-    def key_changed_meanwhile(*args, **kwargs):
-        original(*args, **kwargs)
-        sessions.SessionStore().delete(old)
+    def key_changed_meanwhile(user, current, new, then=None):
+        # The key changes after the password is set and before this session's key moves, in the same transaction
+        # (change_password runs the view's session update, `then`, inside it).
+        def racing():
+            sessions.SessionStore().delete(old)
+            then()
+
+        original(user, current, new, then=racing)
 
     monkeypatch.setattr(admin_services, "change_password", key_changed_meanwhile)
     caplog.set_level("INFO", logger="softwarden.sessions")

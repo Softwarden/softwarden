@@ -38,6 +38,7 @@ from core.drf import (
     UserBriefSerializer,
     policy,
     refuse_unknown_params,
+    require_session,
 )
 from core.models import ExportPurpose, ExportStatus, Organization, OrgExport
 from core.throttling import ScopedThrottle, with_api_limits
@@ -155,8 +156,8 @@ class OrgExportViewSet(TenantViewSet):
 
     def check_permissions(self, request):
         super().check_permissions(request)  # the role, and a read-only token's write refusal, first
-        if self.action in ("create", "download") and access.pinned_organization_id(request) is not None:
-            raise exceptions.PermissionDenied(org_lifecycle.SESSION_ONLY)
+        if self.action in ("create", "download"):
+            require_session(request, org_lifecycle.SESSION_ONLY)
 
     def perform_content_negotiation(self, request, force=False):
         # A download answers with the file whatever the client accepts; errors are still problem JSON.
@@ -186,10 +187,7 @@ class OrgExportViewSet(TenantViewSet):
 
 def _session_only(request) -> None:
     """Deleting an organization (or cancelling) is a person's decision, re-authenticated: never an API token's."""
-    if access.pinned_organization_id(request) is not None:
-        raise exceptions.PermissionDenied(
-            "Asking for or canceling deletion needs a signed-in session, not an API token."
-        )
+    require_session(request, "Asking for or canceling deletion needs a signed-in session, not an API token.")
 
 
 class OrganizationDeletionView(RoleAPIView):
@@ -239,11 +237,17 @@ class OrganizationDeletionView(RoleAPIView):
     def post(self, request):
         _session_only(request)
         data = self.payload()
-        with transaction.atomic():
-            org = org_lifecycle.request_deletion(
-                self.organization, request.user, data, access.authenticated_at(request)
-            )
-            return Response(self.state(org))
+        # No transaction here: the re-authentication commits its count and audit on its own, and
+        # request_deletion renders the response (`then`) inside the schedule's own transaction.
+        body: dict[str, Any] = {}
+        org_lifecycle.request_deletion(
+            self.organization,
+            request.user,
+            data,
+            access.authenticated_at(request),
+            then=lambda org: body.update(self.state(org)),
+        )
+        return Response(body)
 
     @extend_schema(
         summary="Cancel the organization's scheduled deletion (Admin)",

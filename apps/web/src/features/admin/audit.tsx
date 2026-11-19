@@ -462,6 +462,7 @@ const EVENT_GROUPS = [
   { value: "person", label: "People" },
   { value: "user.login", label: "Sign-ins" },
   { value: "user.login_failed", label: "Failed sign-ins" },
+  { value: "user.password_check_failed", label: "Password check failed" },
   { value: "user", label: "Users and roles" },
   { value: "organization", label: "Settings" },
 ];

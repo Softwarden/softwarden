@@ -13,7 +13,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.db import transaction
 from django.db.models import F
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import exceptions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -24,9 +24,11 @@ from core.drf import (
     ADMIN,
     IF_MATCH,
     PROBLEMS,
+    SIGN_IN_AUTHORITY,
     VIEWER,
     ParamFilter,
     PreconditionRequired,
+    ProblemSerializer,
     RoleAPIView,
     TenantFilterSet,
     TenantViewSet,
@@ -35,8 +37,10 @@ from core.drf import (
     policy,
     refuse_unknown_params,
     require_match,
+    require_session,
     revision,
 )
+from core.impersonation_routes import RESTRICTED_SETTINGS
 from core.models import Membership, Organization, Role, UserIdentity
 
 from . import admin_services, invitations
@@ -103,21 +107,30 @@ class MemberFilterSet(TenantFilterSet):
 @extend_schema_view(
     list=extend_schema(summary="Members of the organization (Admin), by email"),
     create=extend_schema(
-        summary="Invite someone by email (Admin); the same as POST invitations",
+        summary="Invite someone by email (Admin, signed-in session); the same as POST invitations",
         description="Returns the invitation with its link, in this response only. Nobody is added until they accept "
-        "through the link (a new account sets its name and password; an existing account accepts while signed in).",
+        "through the link (a new account sets its name and password; an existing account accepts while signed in). "
+        "An API token is refused (403): an invitation issues sign-in authority.",
         request=InviteInputSerializer,
         responses={201: InvitationCreatedSerializer, **WRITE_ERRORS},
     ),
     retrieve=extend_schema(summary="Get a member (Admin)"),
-    partial_update=extend_schema(summary="Change a member's role or active flag (Admin)"),
+    partial_update=extend_schema(
+        summary="Change a member's role or active flag (Admin, signed-in session)",
+        description="An API token is refused (403). Demoting, deactivating or removing an Admin revokes the API tokens "
+        "they made for others and the invitations they made that are still open.",
+    ),
     destroy=extend_schema(
         summary="Remove someone from this organization only (Admin)",
         description="Their account and other memberships stay, and their API tokens here are revoked. Refused for "
         "their only organization (deactivate them instead), the last Admin and the IT coordinator.",
     ),
     reset_password=extend_schema(
-        summary="Reset a member's password to a temporary one (Admin)",
+        summary="Reset a member's password to a temporary one (Admin, signed-in session)",
+        description="The temporary password is in this response only; the member must change it at their next "
+        "sign-in, and their calendar feeds are revoked. Refused (409) for your own account (change your password "
+        "instead), an account shared with another organization and an account with no password. An API token is "
+        "refused (403).",
         request=None,
         responses={200: MemberWithPasswordSerializer, **WRITE_ERRORS},
     ),
@@ -240,12 +253,18 @@ class OrganizationView(RoleAPIView):
 
     @extend_schema(
         summary="Change organization settings (Admin)",
+        description="A body with a sign-in setting (sso_auto_provision, scim_default_role, scim_role_groups) needs a "
+        "signed-in session: an API token is refused (403) and nothing is saved. Other settings work with a token.",
         parameters=[IF_MATCH],
         request=OrganizationInputSerializer,
         responses={200: OrganizationSerializer, **WRITE_ERRORS, 412: PROBLEMS[412]},
     )
     def patch(self, request):
         data = self.payload()
+        # The sign-in settings (auto-provisioning, SCIM's roles; the keys impersonation refuses too) change who
+        # can sign in, so a body with any of them needs a signed-in session; the whole body is refused, nothing saved.
+        if RESTRICTED_SETTINGS & set(data):
+            require_session(request, SIGN_IN_AUTHORITY)
         with transaction.atomic():
             org = (
                 Organization.objects.select_for_update(of=("self",))
@@ -285,18 +304,34 @@ class PasswordView(RoleAPIView):
     role_policy = policy(ACCOUNT, ACCOUNT)
 
     @extend_schema(
-        summary="Change your password",
-        description="Clears the forced change in every organization and keeps this session signed in.",
+        summary="Change your password (signed-in session)",
+        description="Clears the forced change in every organization, revokes your calendar feeds and keeps this "
+        "session signed in. The current password counts with your account's sign-in attempts: past five wrong ones "
+        "each attempt must wait longer (429 with Retry-After), and a wrong one is audited. An API token is refused "
+        "(403).",
         request=PasswordInputSerializer,
-        responses={204: None, **{c: PROBLEMS[c] for c in (400, 403)}},
+        responses={
+            204: None,
+            **{c: PROBLEMS[c] for c in (400, 403)},
+            429: OpenApiResponse(
+                ProblemSerializer,
+                description="Too many wrong current passwords for this account, or rate limited per user (type "
+                "/problems/rate-limited); Retry-After says when to retry",
+            ),
+        },
     )
     def post(self, request):
         data = self.payload()
         if not Membership.objects.filter(user=request.user).exists():
             raise exceptions.PermissionDenied("Your account isn't part of an organization.")
-        # One transaction: when another request changed the session's key after this one read it, the key change in
-        # update_session_auth_hash raises SessionInterrupted (400, core/sessions.py) and the password stays as it was.
-        with transaction.atomic():
-            admin_services.change_password(request.user, data.get("current_password"), data.get("new_password"))
-            update_session_auth_hash(request, request.user)
+        # The session update is inside the password's transaction (`then`): when another request changed the
+        # session's key after this one read it, the key change in update_session_auth_hash raises SessionInterrupted
+        # (400, core/sessions.py) and the password stays as it was. The current password is checked before that, in a
+        # transaction of its own, so a wrong one stays counted. Never with an API token.
+        admin_services.change_password(
+            request.user,
+            data.get("current_password"),
+            data.get("new_password"),
+            then=lambda: update_session_auth_hash(request, request.user),
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)

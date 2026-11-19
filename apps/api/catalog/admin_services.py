@@ -681,10 +681,8 @@ def update_member(org, actor, membership, data):
             # (docs/API.md); an Admin revokes them separately when the account was compromised.
             changes["sessions_ended"] = sessions.delete_for_users([user.pk])
     if was_admin and not (membership.role == Role.ADMIN and user.is_active):
-        # Tokens this Admin made for other members stand on their authority, which ends here.
-        revoked = _revoke_tokens_created_for_others(org, actor, user, "creator_no_longer_admin")
-        if revoked:
-            changes["api_access_revoked"] = revoked  # not "tokens_revoked": keys naming a token are redacted
+        # Tokens and invitations this Admin made for others stand on their authority, which ends here.
+        changes.update(revoke_authority_created_by(org, actor, user, "creator_no_longer_admin"))
     audit(org, actor, "user.updated", None, {"user": user.id, **changes})
     return membership
 
@@ -693,6 +691,20 @@ def _revoke_tokens_created_for_others(org, actor, user, reason) -> int:
     from api.tokens import revoke_created_for_others  # the api app sits above catalog; imported here, one-way
 
     return revoke_created_for_others(org, actor, user, reason)
+
+
+def revoke_authority_created_by(org, actor, user, reason) -> dict[str, int]:
+    """When `user` stops being an active Admin of `org` (demoted, deactivated, removed; by an Admin or by SCIM): revoke
+     the API tokens they made there for other members and the invitations they made there that are still open
+    , each audited with `reason`. Returns the audit keys for the counts that aren't zero: not
+     "tokens_revoked", since keys naming a token are redacted. Runs in the caller's transaction."""
+    from .invitations import revoke_created_by  # invitations imports this module
+
+    found = {
+        "api_access_revoked": _revoke_tokens_created_for_others(org, actor, user, reason),
+        "invitations_revoked": revoke_created_by(org, actor, user, reason),
+    }
+    return {key: count for key, count in found.items() if count}
 
 
 @transaction.atomic
@@ -717,15 +729,17 @@ def remove_member(org, actor, membership):
     if org.coordinator_id == user.id:
         raise Conflict("This person is the IT coordinator. Choose a new coordinator in Organization settings first.")
     revoked = ApiToken.objects.filter(organization=org, user=user, revoked_at=None).update(revoked_at=timezone.now())
-    # And the tokens they made here for other members, which stood on their Admin authority.
-    revoked += _revoke_tokens_created_for_others(org, actor, user, "creator_removed")
+    # And the tokens and open invitations they made here for others, which stood on their authority.
+    created = revoke_authority_created_by(org, actor, user, "creator_removed")
+    revoked += created.pop("api_access_revoked", 0)
     # Their renewals calendar feed here stops too, for good: re-adding them later doesn't bring the old address back.
     for feed in CalendarFeed.objects.filter(organization=org, user=user, revoked_at=None):
         calendar_feeds.revoke_feed(org, actor, feed)
     role = membership.role
     membership.delete()
     # "api_access_revoked", not "tokens_revoked": keys naming a token are redacted from audit payloads.
-    audit(org, actor, "user.removed", None, {"user": user.id, "role": role, "api_access_revoked": revoked})
+    changes = {"user": user.id, "role": role, "api_access_revoked": revoked, **created}
+    audit(org, actor, "user.removed", None, changes)
     from .invitations import unlink_after_removal  # invitations imports this module
 
     unlink_after_removal(org, actor, user)
@@ -739,12 +753,20 @@ def switch_organization(user, current, target):
     audit(target.organization, user, "user.organization_switched", None, {"user": user.id, "direction": "in"})
 
 
+OWN_RESET = (
+    "You can't reset your own password here. Change it under your account instead (it asks for your current one)."
+)
+
+
 @transaction.atomic
 def reset_password(org, actor, membership):
     """An Admin's reset (temporary password, forced change). Refused for an account shared with another organization:
     one organization's Admin could otherwise sign in as someone who is an Admin elsewhere. Refused too for an account
     with no password (made by single sign-on or SCIM): a temporary password would let the organization's Admin sign in
-    as an address nobody proved, and make that account hold it (invitations.managed)."""
+    as an address nobody proved, and make that account hold it (invitations.managed). Refused for your own
+    account: that would set a new password without the current one, which change_password asks for."""
+    if actor is not None and membership.user_id == actor.pk:
+        raise Conflict(OWN_RESET)
     if _other_organizations(membership):
         raise Conflict(shared_refusal(membership))
     if not membership.user.has_usable_password():  # nor any account an organization made (invitations.managed)
@@ -760,25 +782,76 @@ def _set_temporary_password(membership, actor):
     membership.must_change_password = True
     membership.save()
     audit_account(membership.user, actor, "user.password_reset", {"user": membership.user.id})
+    revoke_calendar_feeds(membership.user, actor, "password_reset")
     return temp
 
 
-@transaction.atomic
-def change_password(user, current, new):
-    if not user.check_password(current or ""):
-        raise FieldErrors({"current_password": ["That isn't your current password."]})
+def revoke_calendar_feeds(user, actor, reason) -> int:
+    """Every live renewals calendar feed of the account, in each organization, stops when its password is
+    reset or changed: the feed's secret URL is a credential, and whoever set the old password may hold it. Each is
+    audited (calendar_feed.revoked, with the reason) in the caller's transaction. Returns how many."""
+    from money import calendar_feeds  # the money app sits beside catalog; imported here, as in remove_member
+    from money.models import CalendarFeed
+
+    feeds = list(
+        CalendarFeed.objects.select_related("organization")
+        .filter(user=user, revoked_at=None)
+        .order_by("created_at", "id")
+    )
+    for feed in feeds:
+        calendar_feeds.revoke_feed(feed.organization, actor, feed, reason=reason)
+    return len(feeds)
+
+
+WRONG_CURRENT_PASSWORD = "That isn't your current password."  # noqa: S105  (a message)
+
+
+def check_current_password(user, password: Any, purpose: str) -> bool:
+    """Whether `password` is the account's current one, counted with its sign-in attempts (core/signin_limits.py): past ACCOUNT_FREE failures each check must wait longer (429 with Retry-After, the right
+    password included), and a match forgets the count. A failed check is audited as user.password_check_failed (the
+    purpose, never the password). Every current-password check goes through this: change_password and
+    org_lifecycle.reauthenticate call it themselves, so no route forgets it.
+
+    The account's counter row stays locked (SELECT ... FOR UPDATE in core/counters.attempt) until this transaction
+    ends, so through the password hash: a parallel sign-in or check for the same account waits about one hash time.
+
+    Runs in a transaction of its own (`durable`): a failure is refused by raising, and the count and the audit event
+    must stay committed when that rolls back the caller's work. Called inside another transaction it raises
+    RuntimeError, so a caller that would roll the count back fails loudly in tests instead of silently."""
+    from core import signin_limits
+
+    with transaction.atomic(durable=True):
+        signin_limits.attempt_account(user.username)
+        matched = isinstance(password, str) and bool(password) and user.check_password(password)
+        if matched:
+            signin_limits.forget_account(user.username)
+        else:
+            audit_account(user, user, "user.password_check_failed", {"user": user.id, "purpose": purpose})
+    return matched
+
+
+def change_password(user, current, new, then: Callable[[], None] | None = None):
+    """Your own password change: the current password first (counted, check_current_password, in its own
+    transaction), then the new one is validated and set in one transaction, with `then` (the view's session update)
+    inside it. Clears the forced change everywhere, ends open reset links and revokes the account's calendar feeds."""
+    if not check_current_password(user, current, "password_change"):
+        raise FieldErrors({"current_password": [WRONG_CURRENT_PASSWORD]})
     if current == new:
         raise FieldErrors({"new_password": ["Choose a different password from your current one."]})
     try:
         validate_password(new or "", user)
     except ValidationError as e:
         raise FieldErrors({"new_password": e.messages}) from e
-    user.set_password(new)
-    user.save()
-    end_open_links(user)  # an emailed reset link from before this mustn't set the password again
-    # The flag is about the account (core/access.py): clear it everywhere.
-    Membership.objects.filter(user=user, must_change_password=True).update(must_change_password=False)
-    audit_account(user, user, "user.password_changed", {"user": user.id})
+    with transaction.atomic():
+        user.set_password(new)
+        user.save()
+        end_open_links(user)  # an emailed reset link from before this mustn't set the password again
+        # The flag is about the account (core/access.py): clear it everywhere.
+        Membership.objects.filter(user=user, must_change_password=True).update(must_change_password=False)
+        audit_account(user, user, "user.password_changed", {"user": user.id})
+        revoke_calendar_feeds(user, user, "password_changed")
+        if then is not None:
+            then()
 
 
 # A license key in PATCH organization is refused, not ignored: it isn't an organization setting.

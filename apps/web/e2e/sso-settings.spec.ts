@@ -274,7 +274,8 @@ test("Auto-provision puts an unknown identity in pending access; approving it cr
   // An account approval made has no password, so there is none to reset (the API refuses it): no button, why.
   await expect(row.getByRole("button", { name: /^Reset password/ })).toHaveCount(0);
   await expect(row.getByTestId("no-password")).toHaveText("No password to reset: signs in through single sign-on");
-  await expect(admin.getByRole("region", { name: "Users table" }).getByRole("row").filter({ hasText: ADMIN }).getByRole("button", { name: /^Reset password/ })).toBeVisible();
+  await expect(admin.getByRole("region", { name: "Users table" }).getByRole("row").filter({ hasText: ADMIN }).getByRole("button", { name: /^Reset password/ })).toHaveCount(0); // Never your own account
+  await expect(row.getByRole("button", { name: /^Unlink Okta/ })).toBeVisible();
   await expectNoViolations(admin, "Members with single sign-on identities");
   await row.getByRole("button", { name: /^Unlink Okta/ }).click();
   const unlink = admin.getByRole("dialog", { name: /^Unlink Okta from / });

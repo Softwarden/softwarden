@@ -6,9 +6,11 @@ its path, because gunicorn's access log writes the path only (gunicorn.conf.py),
 line; it is never in an audit payload or snapshot either (the audit keys are the owner and the prefix).
 
 A feed reads as its owner in its organization: it stops working when revoked, when the owner is deactivated or leaves
-the organization. Every refusal is the same 404 (`authenticate` returns None), so a guess learns nothing about which
-feeds exist. One live feed per person per organization; rotating revokes the old row and makes a new one, so a revoked
-secret never works again. Create, rotate and revoke are audited (calendar_feed.created / .rotated / .revoked)."""
+the organization, and while the owner must change their password. A password reset or change revokes the owner's
+feeds (catalog/admin_services.revoke_calendar_feeds). Every refusal is the same 404 (`authenticate` returns
+None), so a guess learns nothing about which feeds exist. One live feed per person per organization; rotating revokes
+the old row and makes a new one, so a revoked secret never works again. Create, rotate and revoke are audited
+(calendar_feed.created / .rotated / .revoked)."""
 
 from __future__ import annotations
 
@@ -85,12 +87,15 @@ def rotate_feed(org, user, feed: CalendarFeed) -> tuple[CalendarFeed, str]:
 
 
 @transaction.atomic
-def revoke_feed(org, actor, feed: CalendarFeed) -> CalendarFeed:
+def revoke_feed(org, actor, feed: CalendarFeed, reason: str | None = None) -> CalendarFeed:
+    """`reason` names why someone other than its owner's own choice stopped it (password_reset, password_changed)."""
     locked = CalendarFeed.objects.select_for_update().get(id=feed.id)
     if locked.revoked_at is None:
         locked.revoked_at = timezone.now()
         locked.save(update_fields=["revoked_at", "updated_at"])
-        audit(org, actor, "calendar_feed.revoked", locked, _values(locked))
+        audit(
+            org, actor, "calendar_feed.revoked", locked, {**_values(locked), **({"reason": reason} if reason else {})}
+        )
     return locked
 
 
@@ -113,6 +118,10 @@ def authenticate(secret: object) -> tuple[CalendarFeed, Membership] | None:
         .first()
     )
     if membership is None:
+        return None
+    # Not while the account must change its password (an Admin's reset). The reset revoked its feeds; this
+    # holds for any path that sets the flag, and the account's own sign-in is refused the same way (core/access.py).
+    if Membership.objects.filter(user=feed.user, must_change_password=True).exists():
         return None
     now = timezone.now()
     if feed.last_used_at is None or now - feed.last_used_at >= LAST_USED_RESOLUTION:

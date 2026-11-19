@@ -55,6 +55,8 @@ Out of scope:
 - The installation's own secrets are generated on first start into a private volume. The database container gets a copy of the database password alone, in a volume of its own.
 - Rotation is in the README.
 
+**Sign-in authority.** An API token never issues or changes sign-in authority: inviting someone, resending an invitation, resetting a member's password, changing a member's role or active flag, approving pending access, changing or activating single sign-on, changing the organization's sign-in settings (auto-provisioning, SCIM's roles) and changing your own password all need a signed-in session (an API token, Admin and read-write included, gets `403`), so a leaked token can't become a browser session that outlives it. Every check of a current password (changing it, re-authenticating to delete the organization) counts with the account's failed sign-ins below and is audited when wrong. An Admin can't reset their own password. When an Admin is demoted, deactivated or removed, the API tokens they made for others and their open invitations are revoked, and their SCIM tokens stop working (`doctor` warns about such tokens). A password reset or change revokes the account's calendar feeds.
+
 **Containers (Compose).** Only the proxy is published on the host; PostgreSQL is reachable only inside the Compose network (`compose.dev.yaml` publishes it on 127.0.0.1 for development). No container can gain privileges (`no-new-privileges`). The app, worker, migrate and MCP containers drop every Linux capability, run as an unprivileged user under a minimal init (`init: true`, so signals are forwarded and exited child processes reaped) and have a read-only root filesystem with a tmpfs `/tmp`. Backup set files are mode 0600 in 0700 folders. The image has no SUID or SGID files, no `pip` and no `uv`. The services that run as root keep only the capabilities they use: `init` (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`), `db` (those three plus `SETUID` and `SETGID`, to drop to the postgres user) and the proxy (`NET_BIND_SERVICE`). Every service has a memory and a process limit (`docs/04-development/operations.md`, "Container limits"). The Helm chart sets the equivalent pod security context.
 
 **HTTP headers.** The app sends these itself on every response (`apps/api/softwarden/security_headers.py`), so they are there whatever proxy is in front:
@@ -80,7 +82,7 @@ Caddy refuses a request body over `SOFTWARDEN_MAX_REQUEST_MB` before it reaches 
 | What | Default | Keyed on |
 | --- | --- | --- |
 | Password sign-in (and confirming a signup) | 10/min (`LOGIN_THROTTLE_RATE`) | client address |
-| Failed sign-ins for one account | 5 free, then a wait of 1, 2, 4 ... seconds (at most 5 minutes) after each attempt; lapses after 15 quiet minutes or a successful sign-in (fixed in code) | the email, from any address |
+| Failed sign-ins for one account (and wrong current passwords: password change, organization deletion) | 5 free, then a wait of 1, 2, 4 ... seconds (at most 5 minutes) after each attempt; lapses after 15 quiet minutes or a successful sign-in (fixed in code) | the email, from any address |
 | Single sign-on start and callback (OIDC) | 120/min (`SOFTWARDEN_SSO_THROTTLE_RATE`) | client address |
 | Invitation links | 30/min (`SOFTWARDEN_INVITATION_THROTTLE_RATE`) | client address |
 | Refused bearer tokens (API) | 30/min, then `429` instead of `401` (`SOFTWARDEN_INVALID_TOKEN_RATE`) | client address |

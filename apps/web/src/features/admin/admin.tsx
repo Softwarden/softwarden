@@ -801,6 +801,8 @@ function MembersTab() {
                     {/* An account with no password (made by single sign-on or SCIM) has none to reset; the API refuses it. */}
                     {u.has_password === false
                       ? <span className="inline-block max-w-48 text-left align-middle text-sm text-muted-foreground" data-testid="no-password">No password to reset: signs in through single sign-on</span>
+                      : u.id === me.user.id /* The API refuses a reset of your own account (409). */
+                        ? <span className="inline-block max-w-48 text-left align-middle text-sm text-muted-foreground" data-testid="own-password">Your account: change your password from your profile</span>
                       : <Button size="sm" variant="outline" onClick={() => reset(u)}>Reset password<span className="sr-only"> for {u.name}</span></Button>}
                   </TableCell>
                 </TableRow>

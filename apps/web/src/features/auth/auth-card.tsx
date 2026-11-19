@@ -1,7 +1,7 @@
 /** The card shown outside the shell (sign-in, setup, invitation, signup) and the forced password change: a small module
  *  of its own, because the sign-in page and the app shell load it up front while the Admin pages are lazy. */
 import { useEffect, useState } from "react";
-import { api, Me } from "@/api";
+import { api, Me, tooManyAttempts } from "@/api";
 import { attempt, ErrorSummary, Field } from "@/components/app";
 import { BrandMark, Wordmark } from "@/components/sw";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ export function ChangePassword({ me, onChanged }: { me: Me; onChanged: () => voi
     e.preventDefault();
     if (form.new_password !== form.confirm) return setErrors({ confirm: ["The two new passwords don't match."] });
     const failed = await attempt(() => api("auth/password", { method: "POST", body: { current_password: form.current_password, new_password: form.new_password } }));
+    if (failed?.status === 429) return setErrors({ current_password: [tooManyAttempts(failed.retryAfter)] });
     if (failed) return setErrors(Object.keys(failed.errors).length ? failed.errors : { current_password: [failed.detail] });
     await api("auth/csrf");
     onChanged();

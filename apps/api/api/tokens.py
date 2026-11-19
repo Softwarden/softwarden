@@ -12,10 +12,10 @@ from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework import authentication, exceptions, status
 
 from catalog.services import audit
-from core import limits, signin_limits
+from core import access, limits, signin_limits
 from core.dates import org_today
 from core.middleware import client_ip
-from core.models import Membership, Role
+from core.models import Membership
 from core.request_context import note_via
 
 from .models import ApiToken
@@ -94,12 +94,7 @@ def refuse(address: str, message: str) -> NoReturn:
 
 
 def _creator_is_admin(token) -> bool:
-    return Membership.objects.filter(
-        user_id=token.created_by_id,
-        user__is_active=True,
-        organization_id=token.organization_id,
-        role=Role.ADMIN,
-    ).exists()
+    return access.is_active_admin(token.created_by_id, token.organization_id)
 
 
 @transaction.atomic

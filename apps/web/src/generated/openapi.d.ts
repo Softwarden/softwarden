@@ -1717,8 +1717,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Change your password
-         * @description Clears the forced change in every organization and keeps this session signed in.
+         * Change your password (signed-in session)
+         * @description Clears the forced change in every organization, revokes your calendar feeds and keeps this session signed in. The current password counts with your account's sign-in attempts: past five wrong ones each attempt must wait longer (429 with Retry-After), and a wrong one is audited. An API token is refused (403).
          */
         post: operations["auth_password_create"];
         delete?: never;
@@ -4679,8 +4679,8 @@ export interface paths {
         get: operations["invitations_list"];
         put?: never;
         /**
-         * Invite someone by email (Admin)
-         * @description Returns the invitation with its link, in this response only, and emails the link to the invitee when the installation can send email (`emailed`). Nobody is added yet: a new account is created, or an existing one joins, when they accept through the link. On an installation with more than one organization (or in cloud mode) the link returned here joins an existing account (signed in as itself) but creates none: only the emailed link, which proves the mailbox, does. A live invitation for the same email is replaced (revoked). Refused (400) for a member of this organization; the answer is otherwise the same whether or not the email has an account elsewhere.
+         * Invite someone by email (Admin, signed-in session)
+         * @description Returns the invitation with its link, in this response only, and emails the link to the invitee when the installation can send email (`emailed`). Nobody is added yet: a new account is created, or an existing one joins, when they accept through the link. On an installation with more than one organization (or in cloud mode) the link returned here joins an existing account (signed in as itself) but creates none: only the emailed link, which proves the mailbox, does. A live invitation for the same email is replaced (revoked). Refused (400) for a member of this organization; the answer is otherwise the same whether or not the email has an account elsewhere. An API token is refused (403): an invitation issues sign-in authority.
          */
         post: operations["invitations_create"];
         delete?: never;
@@ -4727,8 +4727,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Make a new link for an invitation (Admin)
-         * @description The old link stops working; the invitation is good for 7 days from now. The link is in this response only, and emailed as on create.
+         * Make a new link for an invitation (Admin, signed-in session)
+         * @description The old link stops working; the invitation is good for 7 days from now. The link is in this response only, and emailed as on create. An API token is refused (403).
          */
         post: operations["invitations_resend_create"];
         delete?: never;
@@ -5503,8 +5503,7 @@ export interface paths {
         head?: never;
         /**
          * Change organization settings (Admin)
-         * @description The current organization's settings. PATCH saves only the settings columns (admin_services
-         *     .ORGANIZATION_SETTINGS); edition, slug and the license key are operator-only (manage.py set_edition).
+         * @description A body with a sign-in setting (sso_auto_provision, scim_default_role, scim_role_groups) needs a signed-in session: an API token is refused (403) and nothing is saved. Other settings work with a token.
          */
         patch: operations["organization_partial_update"];
         trace?: never;
@@ -5719,8 +5718,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Approve a pending access request with a role (Admin)
-         * @description Creates the account (no password: they sign in with single sign-on), its membership and the pinned identity, or only pins the identity for someone already a member here. Any other account with this email (in another organization, or in none) is 409 /problems/invitation-required: invite them instead. Returns the member.
+         * Approve a pending access request with a role (Admin, signed-in session)
+         * @description Creates the account (no password: they sign in with single sign-on), its membership and the pinned identity, or only pins the identity for someone already a member here. Any other account with this email (in another organization, or in none) is 409 /problems/invitation-required: invite them instead. Returns the member. An API token is refused (403).
          */
         post: operations["pending_access_approve_create"];
         delete?: never;
@@ -7523,7 +7522,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Activate the tested draft (Admin)
+         * Activate the tested draft (Admin, signed-in session)
          * @description Only a draft whose test of its current revision passed can be activated (409 /problems/sso-test-required otherwise). Sign-ins in progress must start again. Password sign-in is unchanged.
          */
         post: operations["sso_settings_activate_create"];
@@ -7543,7 +7542,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Turn single sign-on off for this organization (Admin)
+         * Turn single sign-on off for this organization (Admin, signed-in session)
          * @description Members sign in with their passwords; the installation's legacy SOFTWARDEN_OIDC_* isn't used either. Activate a tested draft to turn it on again.
          */
         post: operations["sso_settings_disable_create"];
@@ -7563,7 +7562,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verify a pending sign-in domain by its DNS TXT record (Admin)
+         * Verify a pending sign-in domain by its DNS TXT record (Admin, signed-in session)
          * @description Looks up the TXT record `record_name` of one of sign_in_domains and, when it carries `record_value` and no other organization holds the domain, marks it verified: it then finds this organization on the sign-in page. Every refusal (no record yet, a DNS failure, a domain held elsewhere) is the same 400 on `domain`. A verified domain answers its state again. Audited.
          */
         post: operations["sso_settings_domains_verify_create"];
@@ -7890,8 +7889,8 @@ export interface paths {
         get: operations["users_list"];
         put?: never;
         /**
-         * Invite someone by email (Admin); the same as POST invitations
-         * @description Returns the invitation with its link, in this response only. Nobody is added until they accept through the link (a new account sets its name and password; an existing account accepts while signed in).
+         * Invite someone by email (Admin, signed-in session); the same as POST invitations
+         * @description Returns the invitation with its link, in this response only. Nobody is added until they accept through the link (a new account sets its name and password; an existing account accepts while signed in). An API token is refused (403): an invitation issues sign-in authority.
          */
         post: operations["users_create"];
         delete?: never;
@@ -7923,9 +7922,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Change a member's role or active flag (Admin)
-         * @description The organization's memberships, addressed by user ID. Account-level changes (password, active flag, Entra
-         *     identity) are refused with 409 for an account that also belongs to another organization.
+         * Change a member's role or active flag (Admin, signed-in session)
+         * @description An API token is refused (403). Demoting, deactivating or removing an Admin revokes the API tokens they made for others and the invitations they made that are still open.
          */
         patch: operations["users_partial_update"];
         trace?: never;
@@ -7981,9 +7979,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reset a member's password to a temporary one (Admin)
-         * @description The organization's memberships, addressed by user ID. Account-level changes (password, active flag, Entra
-         *     identity) are refused with 409 for an account that also belongs to another organization.
+         * Reset a member's password to a temporary one (Admin, signed-in session)
+         * @description The temporary password is in this response only; the member must change it at their next sign-in, and their calendar feeds are revoked. Refused (409) for your own account (change your password instead), an account shared with another organization and an account with no password. An API token is refused (403).
          */
         post: operations["users_reset_password_create"];
         delete?: never;
@@ -31957,7 +31954,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited per API token or per user (type /problems/rate-limited) */
+            /** @description Too many wrong current passwords for this account, or rate limited per user (type /problems/rate-limited); Retry-After says when to retry */
             429: {
                 headers: {
                     /** @description Seconds to wait before the bucket has room again. */
@@ -54772,7 +54769,7 @@ export interface operations {
     platform_audit_events_list: {
         parameters: {
             query?: {
-                action?: "backup.key_acknowledged" | "capability.granted" | "capability.override_removed" | "capability.revoked" | "export.requested" | "impersonation.expired" | "impersonation.started" | "impersonation.stopped" | "limit.override_removed" | "limit.set" | "organization.deletion_cancelled" | "organization.edition_changed" | "organization.suspended" | "organization.unsuspended" | "sign_in_domain.moved" | "sign_in_domain.released" | "signin.failures_forgotten" | "staff.granted" | "staff.revoked" | "staff.second_factor_enrolled" | "staff.second_factor_enrollment_started" | "staff.second_factor_failed" | "staff.second_factor_reset" | "staff.second_factor_verified" | "staff.sign_in_failed" | "staff.signed_in";
+                action?: "backup.key_acknowledged" | "capability.granted" | "capability.override_removed" | "capability.revoked" | "export.requested" | "impersonation.expired" | "impersonation.started" | "impersonation.stopped" | "limit.override_removed" | "limit.set" | "organization.deletion_cancelled" | "organization.edition_changed" | "organization.suspended" | "organization.unsuspended" | "sign_in_domain.moved" | "sign_in_domain.released" | "signin.failures_forgotten" | "staff.granted" | "staff.password_check_failed" | "staff.revoked" | "staff.second_factor_enrolled" | "staff.second_factor_enrollment_started" | "staff.second_factor_failed" | "staff.second_factor_reset" | "staff.second_factor_verified" | "staff.sign_in_failed" | "staff.signed_in";
                 actor?: number;
                 /** @description The next or previous value from a page. */
                 cursor?: string;

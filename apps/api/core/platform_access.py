@@ -76,8 +76,9 @@ def sso_confined(request: Any) -> bool:
 
 def staff_session(request: Any) -> bool:
     """Whether this request would pass `check_platform` outside the platform routes: a signed-in session (no API token)
-    whose real person is platform staff, signed in with their password, not impersonating. Never raises. Tenant routes
-    that show installation-wide detail to staff only use it (core/system_views.py)."""
+    whose real person is platform staff, signed in with their password, not impersonating, with no forced password
+    change and, with SOFTWARDEN_PLATFORM_TOTP on, the second factor verified in this session. Never
+    raises. Tenant routes that show installation-wide detail to staff only use it (core/system_views.py)."""
     user = getattr(request, "user", None)
     if not (user and user.is_authenticated) or getattr(request, "auth", None) is not None:
         return False
@@ -86,7 +87,11 @@ def staff_session(request: Any) -> bool:
     real = real_user(request)
     if not is_platform_staff(real):
         return False
-    return not Membership.objects.filter(user_id=real.pk, must_change_password=True).exists()
+    if Membership.objects.filter(user_id=real.pk, must_change_password=True).exists():
+        return False
+    from catalog import staff_second_factor  # catalog depends on core: not at import time
+
+    return not staff_second_factor.required() or staff_second_factor.verified(request, real)
 
 
 def check_platform(request: Any, view: Any) -> bool:
