@@ -605,9 +605,11 @@ def test_docker_compose_config_keeps_the_hardening():
 def test_the_image_has_no_setuid_files_and_no_package_tools():
     """A code-execution bug in the app finds no SUID binary and no uv or pip. uv is bind-mounted into the one
     build step that uses it, never copied into a layer. The clean-stack check looks at a built image."""
-    dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
-    assert "COPY --from=ghcr.io/astral-sh/uv" not in dockerfile
-    assert re.search(r"^FROM ghcr\.io/astral-sh/uv:\S+@sha256:[0-9a-f]{64} AS uv$", dockerfile, re.MULTILINE)
-    assert "--mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv" in dockerfile
-    assert "python -m pip uninstall --yes pip" in dockerfile
-    assert "-perm /6000 -type f -exec chmod a-s" in dockerfile
+    for path in ("Dockerfile", "mcp/Dockerfile"):  # The MCP image gets the same treatment
+        dockerfile = (REPO / path).read_text(encoding="utf-8")
+        assert "COPY --from=ghcr.io/astral-sh/uv" not in dockerfile, path
+        assert re.search(r"^FROM ghcr\.io/astral-sh/uv:\S+@sha256:[0-9a-f]{64} AS uv$", dockerfile, re.MULTILINE), path
+        assert "--mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv" in dockerfile, path
+        assert "python -m pip uninstall --yes pip" in dockerfile, path
+        assert "rm -rf /usr/local/lib/python3.13/ensurepip" in dockerfile, path
+        assert "-perm /6000 -type f -exec chmod a-s" in dockerfile, path

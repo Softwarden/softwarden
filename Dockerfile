@@ -90,11 +90,12 @@ RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
 # /data/rehearsal is where `ops/restore.sh --rehearse` unpacks a media archive, in a throwaway volume (the root
 # filesystem is read-only in compose and /tmp is a small tmpfs).
 # Then, for a code-execution bug in the app: no SUID or SGID file to climb with (compose also
-# sets no-new-privileges), and no pip (uv was never copied in; apps use the venv).
+# sets no-new-privileges), and no pip or ensurepip (uv was never copied in; apps use the venv).
 RUN useradd --system --create-home --uid 10001 softwarden \
  && install -d -m 0700 -o softwarden -g softwarden /data/secrets /data/bootstrap /data/media /data/backups \
     /data/rehearsal \
  && /usr/local/bin/python -m pip uninstall --yes pip \
+ && rm -rf /usr/local/lib/python3.13/ensurepip \
  && find / -xdev -perm /6000 -type f -exec chmod a-s {} + \
  && ! find / -xdev -perm /6000 -type f | grep -q .
 USER softwarden

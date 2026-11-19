@@ -13,11 +13,18 @@ Softwarden {{ .Chart.AppVersion }} is starting at https://{{ .Values.publicHostn
      kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "softwarden.fullname" . }}-app -- python manage.py bootstrap_admin --create
 {{- end }}
 
-3. Check the installation (no secrets are printed):
+3. Network policy: {{ if .Values.networkPolicy.enabled }}ON. The app{{ if .Values.mcp.enabled }} and MCP pods accept{{ else }} pods accept{{ end }} traffic only from namespaces matching
+     {{ toJson .Values.networkPolicy.ingressNamespaceSelector }}{{ with .Values.networkPolicy.ingressPodSelector }} (pods {{ toJson . }}){{ end }}{{ with .Values.networkPolicy.extraIngress }} and {{ toJson . }}{{ end }}.
+   Site not answering? Set networkPolicy.ingressNamespaceSelector (or networkPolicy.extraIngress) to where your
+   ingress controller runs, or networkPolicy.enabled=false.
+{{- else }}OFF (networkPolicy.enabled=false): any pod in the cluster can reach the app.
+{{- end }}
+
+4. Check the installation (no secrets are printed):
      kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "softwarden.fullname" . }}-app -- python manage.py doctor
 {{- if not .Values.secrets.existingSecret }}
 
-4. The chart generated this installation's keys in the Secret {{ include "softwarden.secretName" . }}. Copy
+5. The chart generated this installation's keys in the Secret {{ include "softwarden.secretName" . }}. Copy
    credential_keys and backup_key off the cluster now: without them stored secrets and backups can't be read.
      kubectl -n {{ .Release.Namespace }} get secret {{ include "softwarden.secretName" . }} -o jsonpath='{.data.credential_keys}' | base64 -d
      kubectl -n {{ .Release.Namespace }} get secret {{ include "softwarden.secretName" . }} -o jsonpath='{.data.backup_key}' | base64 -d

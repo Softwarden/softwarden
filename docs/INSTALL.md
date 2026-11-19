@@ -22,6 +22,10 @@ Docker Compose is the supported way to install. There is also a [Helm chart](../
 
 **What has been tested.** These steps were written from the Compose files and management commands and checked against release 1.0.0. A complete run on a fresh VM, timed end to end, hasn't been recorded yet, and the Let's Encrypt option hasn't been tried on a VM.
 
+## Installing with Helm (Kubernetes)
+
+The [chart's README](../deploy/helm/softwarden/README.md) has the steps. One thing to know before you install: the chart creates an ingress-only NetworkPolicy by default (`networkPolicy.enabled`), so the app answers only to the namespace of your ingress controller, `ingress-nginx` unless you change it. On another controller (k3s's Traefik in `kube-system`, `traefik`, `openshift-ingress`, a Gateway API controller) or behind a cloud load balancer that sends traffic straight to pods (GKE NEG, AWS Load Balancer Controller in IP mode, AGIC), set `networkPolicy.ingressNamespaceSelector` or `networkPolicy.extraIngress`, or turn the policy off with `networkPolicy.enabled=false`; otherwise the site will not answer. The notes printed after `helm install` show the selector in use.
+
 ## What you need
 
 - **A VM.** 2 vCPU, 4 GB RAM and 20 GB disk, running Ubuntu Server 24.04 LTS. Any distribution with Docker Engine works; the commands below are Ubuntu's.

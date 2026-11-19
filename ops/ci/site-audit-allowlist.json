@@ -1,0 +1,5 @@
+{
+  "_comment": "Advisories CI's npm audit accepts for the website (site/). None: fix or upgrade instead. Same format as apps/web/audit-allowlist.json (ops/ci/npm-audit-check.py).",
+  "level": "moderate",
+  "allow": []
+}

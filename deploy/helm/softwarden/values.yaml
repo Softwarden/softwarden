@@ -20,7 +20,7 @@ publicHostname: softwarden.example.com
 
 # Who may set X-Forwarded-For / X-Forwarded-Proto / X-Request-ID: your ingress controller's pods. Private ranges by
 # default, which only peers inside the cluster can come from (SOFTWARDEN_TRUSTED_PROXIES). Narrow it to the controller's
-# pod CIDR where you can.
+# pod CIDR where you can. In cloud mode the chart refuses this default (and an empty value): set your own.
 trustedProxies: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
 # ---- PostgreSQL 17 (external; the chart bundles none) -----------------------------------------------------------------
@@ -198,6 +198,24 @@ persistence:
     existingClaim: ""
 
 # ---- network ----------------------------------------------------------------------------------------------------------
+# An ingress-only NetworkPolicy for the app and MCP pods (needs a CNI that enforces NetworkPolicy): they accept traffic
+# only from the ingress controller's namespace, and the app also from this release's MCP pods. Egress is not restricted.
+# Set the selectors to where your ingress controller runs; ingressPodSelector narrows it to the controller's pods.
+# Common namespaces (kubernetes.io/metadata.name): ingress-nginx; kube-system (k3s's bundled Traefik, and many managed
+# clusters' controllers); traefik; openshift-ingress (OpenShift routers); the namespace of a Gateway API controller
+# (envoy-gateway-system, istio-system, ...). {} for the namespace selector admits EVERY namespace in the cluster.
+# Sources that aren't pods in a namespace (a cloud load balancer sending straight to pods: GKE NEG, AWS Load Balancer
+# Controller in IP mode, AGIC; or service.type LoadBalancer/NodePort) are admitted through extraIngress.
+networkPolicy:
+  enabled: true
+  ingressNamespaceSelector:
+    kubernetes.io/metadata.name: ingress-nginx
+  ingressPodSelector: {}   # e.g. app.kubernetes.io/name: ingress-nginx
+  # Raw NetworkPolicy peers added to every policy's `from`, e.g.
+  #   - ipBlock: { cidr: 10.20.0.0/16 }   # the load balancer's or the nodes' range
+  # Required while service.type isn't ClusterIP (the chart refuses to render otherwise).
+  extraIngress: []
+
 service:
   type: ClusterIP
   port: 8000

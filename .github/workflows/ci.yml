@@ -54,6 +54,7 @@ jobs:
     env: { SOFTWARDEN_DEBUG: "1" }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with: { version: "0.9.18", enable-cache: true }
       - run: uv sync --frozen
@@ -106,6 +107,7 @@ jobs:
       run: { working-directory: mcp }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with: { version: "0.9.18", enable-cache: true }
       - run: uv sync --frozen
@@ -123,6 +125,7 @@ jobs:
       run: { working-directory: apps/web }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: "22.16", cache: npm, cache-dependency-path: apps/web/package-lock.json }
       - run: npm ci
@@ -146,6 +149,7 @@ jobs:
         otel: ["0", "1"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - run: docker build --build-arg WITH_OTEL=${{ matrix.otel }} --tag softwarden:ci .
       - if: matrix.otel == '0'
         run: docker build --build-context cacerts=ca-certs --tag softwarden-mcp:ci mcp
@@ -190,6 +194,7 @@ jobs:
         options: --health-cmd "pg_isready -U softwarden" --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with: { version: "0.9.18", enable-cache: true }
       - run: uv sync --frozen
@@ -224,13 +229,14 @@ jobs:
   # Known vulnerabilities in what ships: the API's and the MCP server's locked
   # runtime requirements (every extra, no dev tools) through pip-audit, and the SPA's production npm dependencies at
   # moderate or above, less the advisories apps/web/audit-allowlist.json accepts, each with its reason and a date to
-  # look again. apps/web is the only npm project; mcp/ is Python only. Also runs alone every Monday (schedule).
+  # look again. apps/web and site/ are the npm projects; mcp/ is Python only. Also runs alone every Monday (schedule).
   audit:
     name: Dependency audit
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0
         with: { version: "0.9.18", enable-cache: true }
       - name: API (pip-audit)
@@ -250,6 +256,12 @@ jobs:
           # npm audit exits non-zero whenever it reports anything; the check below decides.
           (cd apps/web && npm audit --omit=dev --json > "$RUNNER_TEMP/npm-audit.json") || true
           python3 ops/ci/npm-audit-check.py "$RUNNER_TEMP/npm-audit.json" apps/web/audit-allowlist.json
+      - name: Website (npm audit, moderate and above, through its own, empty allow-list)
+        run: |
+          # site/ is the softwarden.dev website; skipped where a checkout doesn't carry it.
+          if [ ! -f site/package-lock.json ]; then echo "no site/package-lock.json: skipped"; exit 0; fi
+          (cd site && npm audit --omit=dev --json > "$RUNNER_TEMP/npm-audit-site.json") || true
+          python3 ops/ci/npm-audit-check.py "$RUNNER_TEMP/npm-audit-site.json" ops/ci/site-audit-allowlist.json
 
   # The deployment files no other job exercises: the Helm chart (default values, the external-Postgres example and the
   # cloud values), the Caddyfile under the exact caddy tag compose.yaml pins, and the shell scripts.
@@ -260,6 +272,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4.3.1
         with: { version: "v3.19.0" }
       - run: helm lint deploy/helm/softwarden
@@ -283,6 +296,15 @@ jobs:
           refused "database.existingSecret" $cloud --set database.existingSecret=
           refused "the database password never goes in values" $cloud --set database.existingSecret= --set database.password=x
           refused "set database.sslmode to require" $cloud --set database.sslmode=prefer
+          refused "set trustedProxies" $cloud --set 'trustedProxies=10.0.0.0/8\,172.16.0.0/12\,192.168.0.0/16'
+          refused "set trustedProxies" $cloud --set 'trustedProxies=192.168.0.0/16\, 10.0.0.0/8 \,172.16.0.0/12'
+          refused "set trustedProxies" $cloud --set 'trustedProxies=*'
+          refused "set trustedProxies" $cloud --set 'trustedProxies=0.0.0.0/0'
+          refused "set trustedProxies" $cloud --set 'trustedProxies= '
+          refused "networkPolicy.extraIngress" --set service.type=LoadBalancer
+          helm template s "$chart" --set service.type=LoadBalancer --set 'networkPolicy.extraIngress[0].ipBlock.cidr=10.1.0.0/16' > /dev/null
+          helm template s "$chart" --set service.type=LoadBalancer --set networkPolicy.enabled=false > /dev/null
+          refused "set trustedProxies" $cloud --set trustedProxies=
           refused "set smtp.host" $cloud --set smtp.host=
           refused "set smtp.existingSecret for its password" $cloud --set smtp.existingSecret=
           refused "shares the attachment files" --set worker.replicas=2
@@ -319,7 +341,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-        with: { fetch-depth: 0, ref: "${{ github.event.pull_request.head.sha }}" }
+        with: { fetch-depth: 0, ref: "${{ github.event.pull_request.head.sha }}", persist-credentials: false }
       - name: Every commit is signed off by its author
         run: bash ops/ci/check-dco.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
 
@@ -331,6 +353,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with: { persist-credentials: false }
       - run: docker compose up -d --build --wait --wait-timeout 600
       - run: docker compose exec -T app python manage.py bootstrap_admin --prepare
       - name: doctor (JSON, no failure)
@@ -376,5 +399,5 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
-        with: { fetch-depth: 0 }  # the release tags and their history
+        with: { fetch-depth: 0, persist-credentials: false }  # the release tags and their history
       - run: bash ops/ci/restore-previous.sh

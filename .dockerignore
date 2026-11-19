@@ -26,6 +26,7 @@ docs
 !docs/API.md
 tools
 mcp
+site
 # One machine's local state, which `COPY apps/api/ ./` in the Dockerfile would otherwise build into the image and hand
 # to everyone who pulls it: attachment files and organization exports a local run wrote under
 # media/, the first-run setup token, environment files, logs, backups, certificates and review notes. Everything

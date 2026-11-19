@@ -5,6 +5,8 @@ values only use real keys, the workloads start the way compose.yaml does, and ev
 docs/ENV.md. CI runs `helm lint` and `helm template` where helm is installed."""
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -257,3 +259,61 @@ def test_the_app_sends_hsts_with_ingress_tls_and_pods_mount_no_service_account_t
         assert "automountServiceAccountToken: false" in texts[name], name
     # The chart README no longer tells operators to add a CSP on the ingress.
     assert "Don't add a CSP on the ingress" in (CHART / "README.md").read_text(encoding="utf-8")
+
+
+def test_an_ingress_only_network_policy_is_on_by_default_and_cloud_needs_its_own_trusted_proxies():
+    """App and MCP pods admit only the ingress namespace (and the app, this release's MCP pods); cloud mode
+    refuses the default trustedProxies, which CI's refusal step renders."""
+    values = load(CHART / "values.yaml")
+    assert values["networkPolicy"]["enabled"] is True and values["networkPolicy"]["ingressNamespaceSelector"]
+    policy = template_text()["networkpolicy.yaml"]
+    assert "policyTypes: [Ingress]" in policy and "Egress" not in policy.replace("Egress is untouched", "")
+    assert "if .Values.networkPolicy.enabled" in policy
+    helpers = template_text()["_helpers.tpl"]
+    assert values["trustedProxies"] in helpers and "set trustedProxies" in helpers
+    assert load(CHART / "values-cloud.yaml")["trustedProxies"] != values["trustedProxies"]
+
+
+def test_ci_refusal_cases_escape_commas_in_trusted_proxies():
+    r"""`helm --set` splits on commas, so a list value must be written `\,`; unescaped, helm fails parsing and the
+    CI step reports a wrong refusal instead of testing the guard."""
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    cases = [line for line in ci.splitlines() if 'refused "set trustedProxies"' in line]
+    assert len(cases) >= 5
+    for line in cases:
+        value = line.split("trustedProxies", 2)[2]
+        assert "," not in value.replace(r"\,", ""), line
+    assert any("*" in line for line in cases) and any("0.0.0.0/0" in line for line in cases)
+    assert 'refused "networkPolicy.extraIngress"' in ci
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="helm isn't installed")
+def test_helm_renders_the_network_policy_and_refuses_unsafe_cloud_proxies():
+    def template(*args):
+        return subprocess.run(  # noqa: S603
+            [shutil.which("helm") or "helm", "template", "s", str(CHART), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+
+    cloud = ["-f", str(CHART / "values-cloud.yaml")]
+    default = template("--set", "mcp.enabled=true")
+    assert default.returncode == 0 and default.stdout.count("kind: NetworkPolicy") == 2
+    assert template(*cloud).returncode == 0
+    for value in (
+        r"10.0.0.0/8\,172.16.0.0/12\,192.168.0.0/16",
+        r"192.168.0.0/16\, 10.0.0.0/8 \,172.16.0.0/12",
+        "*",
+        "0.0.0.0/0",
+        "",
+    ):
+        result = template(*cloud, "--set", f"trustedProxies={value}")
+        assert result.returncode != 0 and "set trustedProxies" in result.stderr, value
+    lb = template("--set", "service.type=LoadBalancer")
+    assert lb.returncode != 0 and "networkPolicy.extraIngress" in lb.stderr
+    peers = template(
+        "--set", "service.type=LoadBalancer", "--set", "networkPolicy.extraIngress[0].ipBlock.cidr=10.1.0.0/16"
+    )
+    assert peers.returncode == 0 and "cidr: 10.1.0.0/16" in peers.stdout

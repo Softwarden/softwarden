@@ -1,0 +1,42 @@
+{{- /* An ingress-only NetworkPolicy for the pods that listen (app, and MCP when enabled). Each admits traffic
+only from the ingress controller's namespace (and pods, when networkPolicy.ingressPodSelector is set); the app also
+admits this release's MCP pods, which call it over its Service. The worker and the migration job listen on nothing and
+take no policy. Egress is untouched, so the database, SMTP and Microsoft Graph keep working. Needs a CNI that enforces
+NetworkPolicy; on one that doesn't, the object is accepted and ignored. */ -}}
+{{- if .Values.networkPolicy.enabled }}
+{{- range $component := list "app" "mcp" }}
+{{- if or (eq $component "app") $.Values.mcp.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "softwarden.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "softwarden.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "softwarden.selector" (dict "root" $ "component" $component) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml $.Values.networkPolicy.ingressNamespaceSelector | nindent 14 }}
+          {{- with $.Values.networkPolicy.ingressPodSelector }}
+          podSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+        {{- with $.Values.networkPolicy.extraIngress }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if and (eq $component "app") $.Values.mcp.enabled }}
+        - podSelector:
+            matchLabels:
+              {{- include "softwarden.selector" (dict "root" $ "component" "mcp") | nindent 14 }}
+        {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
