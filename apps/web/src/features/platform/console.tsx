@@ -18,7 +18,7 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation } from "react-route
 import { useEffect } from "react";
 import { byteSize, Problem, PROBLEM_EVENT, SECOND_FACTOR_REQUIRED, signOutRequest, when, type Me, type PlatformSession } from "@/api";
 import { orgDate } from "@/components/org-banners";
-import { EmptyState, ErrorBanner, Loading, PageHead, Select, TableRegion } from "@/components/app";
+import { EmptyState, ErrorBanner, Loading, PageHead, Select, TableRegion, UuidGuard } from "@/components/app";
 import { BrandMark, chip, SuccessNote, Wordmark } from "@/components/sw";
 import { ThemeMenu } from "@/components/theme-menu";
 import { Button } from "@/components/ui/button";
@@ -115,6 +115,7 @@ export function PlatformConsole({ me, staff, banner, onStarted, onSignedOut }: {
           : session.isError ? <ErrorBanner message={problemText(session.error, "Couldn't load the platform console.")} onRetry={() => void session.refetch()} />
           : needsCode(secondFactor) ? <SecondFactorGate state={secondFactor!} onVerified={() => session.refetch()} /> : (
           <Routes>
+            <Route element={<UuidGuard back={{ to: "/platform/organizations", label: "organizations" }} />}>
             <Route index element={<Navigate to="organizations" replace />} />
             <Route path="organizations" element={<OrganizationsPage />} />
             <Route path="organizations/:id" element={<OrganizationPage onStarted={onStarted} />} />
@@ -125,6 +126,7 @@ export function PlatformConsole({ me, staff, banner, onStarted, onSignedOut }: {
               <PageHead title="Page not found" desc="The platform console has no page at this address." />
               <Button asChild variant="outline"><Link to="/platform/organizations">Go to organizations</Link></Button>
             </>} />
+            </Route>
           </Routes>
         )}
       </main>

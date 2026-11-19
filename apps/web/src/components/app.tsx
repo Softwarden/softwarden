@@ -1,6 +1,7 @@
 /** App-level building blocks on top of shadcn/ui, following the UI rules in docs/DEVELOPMENT.md. */
 import { cloneElement, isValidElement, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Outlet, useParams } from "react-router-dom";
+import { isUuid } from "@/lib/safe-path";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Problem } from "@/api";
 import { problemText, useApiQuery } from "@/lib/query";
@@ -136,6 +137,22 @@ export function NotFound({ what, back, trail }: { what: string; back: { to: stri
       <Button asChild variant="outline"><Link to={back.to}>Back to {back.label}</Link></Button>
     </>
   );
+}
+
+/** Every route param that names a record (:id, :eventId, :runId, :connectorId) is a UUID. Other params
+ *  (`:source` on the discovery walkthrough) are checked against their known set by the page that reads them, and are
+ *  never put in an API path. */
+const RECORD_PARAMS = ["id", "eventId", "runId", "connectorId"];
+
+/** A layout route around every page with record ids in its path: a link whose id isn't a UUID (`..%2Fvendors%2F<id>`)
+ *  shows the not-found page and the page never runs, so the id never reaches an API path. */
+export function UuidGuard({ back }: { back: { to: string; label: string } }) {
+  const params = useParams();
+  // `new` is the one word an id param also takes (`/imports/new`, the upload step); it can't climb out of a path.
+  if (RECORD_PARAMS.some((key) => params[key] !== undefined && params[key] !== "new" && !isUuid(params[key]))) {
+    return <NotFound what="page" back={back} />;
+  }
+  return <Outlet />;
 }
 
 export function Breadcrumb({ trail, current }: { trail: { to: string; label: string }[]; current: string }) {

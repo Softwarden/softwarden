@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { uuidOrEmpty } from "@/lib/safe-path";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import {
   api, apiWithEtag, ASSESSMENT_STATUS_LABEL, ASSESSMENT_STATUSES, AssessmentDetail as Assessment, AssessmentRow, AssessmentStatus, cap, Problem, retirementCheck,
@@ -86,7 +87,7 @@ function Detail({ id }: { id: string }) {
 
   const snap = a.snapshot;
   const stale = a.stale;
-  const viewing = params.get("snapshot") ?? "";
+  const viewing = uuidOrEmpty(params.get("snapshot"));
   const viewingEarlier = viewing !== "" && viewing !== snap?.id;
 
   async function refresh() {

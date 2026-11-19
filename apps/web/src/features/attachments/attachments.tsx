@@ -12,6 +12,7 @@
  *  - Add link (http and https only), Edit (title, category, a link's address) with If-Match, and Remove, which says
  *    how long a removed file is kept.
  *  Viewers see the list and downloads only. */
+import { assertSafePath } from "@/lib/safe-path";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Link2 } from "lucide-react";
@@ -198,6 +199,7 @@ function OpenAction({ a }: { a: Attachment }) {
 export function uploadFile(path: string, form: FormData, onProgress: (fraction: number) => void, signal: AbortSignal): Promise<Attachment> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    assertSafePath(path);
     xhr.open("POST", `/api/v1/${path}`);
     xhr.setRequestHeader("Accept", "application/json");
     for (const [name, value] of Object.entries(writeHeaders())) xhr.setRequestHeader(name, value);

@@ -3,7 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-r
 import { Search as SearchIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, IMPERSONATION_ENDED, IMPERSONATION_STARTED, Me, NOT_SIGNED_IN, ORGANIZATION_SUSPENDED, Problem, PROBLEM_EVENT, sessionChange, setTabImpersonation, signOutRequest, type Membership, type PlatformSession } from "@/api";
-import { ErrorBanner, PageHead, useReturnFocus } from "@/components/app";
+import { ErrorBanner, PageHead, useReturnFocus, UuidGuard } from "@/components/app";
 import { PageErrorBoundary } from "@/components/error-boundary";
 import { IS_MAC, PALETTE_KEYS, ShortcutHelp, useShortcuts } from "@/components/shortcuts";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -865,6 +865,7 @@ function Shell({ me, banner, onSignedOut, onMeChange, sessionNotice, onDismissSe
             {/* Keyed by organisation: switching remounts every page, so nothing from the previous one stays on screen.
                 A suspended organization shows why instead of any page: the API refuses them all. */}
             {me.organization_suspended ? <SuspendedPanel me={me} onSignOut={() => void signOut()} onCheck={reloadMe} /> : <PageErrorBoundary><LazyPage><Routes key={me.organization.id}>
+              <Route element={<UuidGuard back={{ to: "/", label: "Needs attention" }} />}>
               <Route path="/" element={<NeedsAttention />} />
               <Route path="/dashboard" element={<LazyPage><DashboardPage /></LazyPage>} />
               <Route path="/reports" element={<LazyPage><ReportsPage /></LazyPage>} />
@@ -972,6 +973,7 @@ function Shell({ me, banner, onSignedOut, onMeChange, sessionNotice, onDismissSe
                 <PageHead title="Page not found" desc="This page doesn't exist, or it needs a different role." />
                 <Button asChild variant="outline"><Link to="/">Go to Needs attention</Link></Button>
               </>} />
+              </Route>
             </Routes></LazyPage></PageErrorBoundary>}
           </main>
         </div>

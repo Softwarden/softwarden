@@ -7506,7 +7506,7 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Change the single sign-on draft and the sign-in domains (Admin)
+         * Change the single sign-on draft and the sign-in domains (Admin, signed-in session)
          * @description Saving a change to the draft bumps draft.revision, which invalidates its test; sign-in keeps using the active configuration until a tested draft is activated. client_secret is write-only: send it only to replace it. Presets compute the discovery URL and issuer: entra from tenant_id, okta from okta_domain and okta_authorization_server, google from Google's document (hosted_domains required); oidc takes discovery_url; saml (needs the optional ee package, else 403 /problems/capability-required) takes idp_entity_id, idp_sso_url and idp_certificates, or idp_metadata_xml. sign_in_domains apply at once. With SOFTWARDEN_SSO_DOMAIN_VERIFICATION (cloud) a new one is pending, routing nobody, until its TXT record is verified (POST sso/settings/domains/verify); without it a domain another organization holds is refused.
          */
         patch: operations["sso_settings_partial_update"];
@@ -20668,7 +20668,7 @@ export interface components {
          *     * `demo_password` - demo_password
          * @enum {string}
          */
-        SystemWarningCodeEnum: "backup_stale" | "backup_failed" | "backup_key_missing" | "backup_key_unacknowledged" | "stored_secrets_unreadable";
+        SystemWarningCodeEnum: "backup_stale" | "backup_failed" | "backup_key_missing" | "backup_key_unacknowledged" | "stored_secrets_unreadable" | "demo_password";
         /** @description Serializers describe and render; they never write. Writes go through each app's service functions. */
         Tag: {
             /** Format: uuid */

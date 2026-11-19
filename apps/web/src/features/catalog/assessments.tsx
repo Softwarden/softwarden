@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { uuidOrEmpty } from "@/lib/safe-path";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ASSESSMENT_STATUSES, ASSESSMENT_STATUS_LABEL, AssessmentRow, AssessmentStatus, ChangeType, LinkKind, Problem, UserRef } from "@/api";
 import { canWrite, useMe } from "@/lib/session";
@@ -162,7 +163,7 @@ export function NewAssessment() {
   const me = useMe();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const prefill = usePrefill(params.get("target") ?? "");
+  const prefill = usePrefill(uuidOrEmpty(params.get("target")));
   const stewards = useLoad<UserRef[]>("stewards");
   const [target, setTarget] = useState<PickedRecord | null>(null);
   const [initialType] = useState<ChangeType | "">(params.get("type") === "retirement" ? "retirement" : params.get("type") === "change" ? "change" : "");

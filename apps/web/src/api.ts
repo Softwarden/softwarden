@@ -1,6 +1,7 @@
 import type { components } from "@/generated/openapi";
 import type { CatalogKind, RecordKind } from "@/lib/kinds";
 import { createSessionGate } from "@/lib/session-gate";
+import { assertSafePath } from "@/lib/safe-path";
 
 export type Person = { id: string; name: string; email: string; department: { id: string; name: string } | null; active: boolean };
 export type Team = { id: string; name: string };
@@ -401,6 +402,7 @@ export function apiWriteWithEtag<T>(path: string, init: { method: string; body?:
 }
 
 async function send<T>(path: string, init: { method?: string; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> }, onResponse?: (response: Response) => void): Promise<T> {
+  assertSafePath(path);
   const method = init.method ?? "GET";
   // `headers` adds request headers, such as If-Match on an edit (412 when the record changed since it was read).
   const headers: Record<string, string> = { Accept: "application/json", ...init.headers };
@@ -807,6 +809,7 @@ export function apiWithEtag<T>(path: string): Promise<{ data: T; etag: string | 
   return gate.tracked(false, () => readWithEtag<T>(path));
 }
 async function readWithEtag<T>(path: string): Promise<{ data: T; etag: string | null }> {
+  assertSafePath(path);
   const response = await fetch(`/api/v1/${path}`, { headers: { Accept: "application/json" }, credentials: "same-origin" });
   const data = await readBody(response);
   if (data === UNREADABLE) throw unreadable(response.status);

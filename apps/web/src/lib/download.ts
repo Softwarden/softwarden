@@ -2,6 +2,7 @@
  *  the name the server gives in Content-Disposition (or `fallback`). Used by every export button, so the problem
  *  handling and the object-URL clean-up live in one place. */
 import { useState } from "react";
+import { assertSafePath } from "@/lib/safe-path";
 
 /** A refused download: the status and the problem body, so a caller can read `type` or field errors. */
 export class DownloadError extends Error {
@@ -18,6 +19,7 @@ export function dispositionName(header: string | null): string | null {
 /** Fetch `/api/v1/<path>` and save it. Returns the saved file's name; throws DownloadError when the API refuses it (its
  *  detail, else field errors, else a sentence per status) or the connection drops. */
 export async function saveDownload(path: string, fallback: string): Promise<string> {
+  assertSafePath(path);
   let res: Response;
   try {
     res = await fetch(`/api/v1/${path}`, { credentials: "same-origin" });

@@ -10,6 +10,7 @@
  *    table and offers Open, Center map here and What depends on this. The answer comes from the record's own
  *    `GET /<records>/<id>/dependencies?direction=dependents&depth=all`, the same body as the explorer's.
  *  - Archived and retired nodes and integrations are shown, never hidden: a dashed border plus the word. */
+import { uuidOrEmpty } from "@/lib/safe-path";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { cap } from "@/api";
@@ -96,7 +97,7 @@ export function MapTab({ kind, id, name, write }: { kind: RecordKind; id: string
   // While another depth loads, the previous map stays on screen (useLoad keeps it).
   const data = load.data?.root === id ? load.data : null;
   const selectedId = params.get("node");
-  const askedId = params.get("dependents");
+  const askedId = uuidOrEmpty(params.get("dependents")) || null;
   // Where focus goes after this render: a panel's heading, when its own action opened it (one target per panel, so
   // opening one never focuses the other). Runs after the render that changes the selection, the answer or the map, so
   // a panel that mounts in that render is there. Once the map is on screen without the panel (a node that isn't on it,

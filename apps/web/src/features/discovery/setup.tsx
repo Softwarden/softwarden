@@ -3,6 +3,7 @@
  *  permissions reference (docs/PERMISSIONS.md) alone. The step, the connector and the run are in the URL
  *  (`?step=scope&connector=…&run=…`), so a reload resumes where it was. A source shows as unavailable without its
  *  capability (every edition has every source, so only when it was turned off for the organization). Admin only (other roles see who may open it). Loaded on first use. */
+import { uuidOrEmpty } from "@/lib/safe-path";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, apiWithEtag, PRECONDITION_FAILED, Problem, type Connection, type ConnectionKind, type Connector, type ConnectorRun, type DiscoverySourceInfo, type ProbeResult } from "@/api";
@@ -127,7 +128,7 @@ function StepHeading({ children }: { children: React.ReactNode }) {
 
 function Steps({ info }: { info: SourceInfo }) {
   const [params, setParams] = useSearchParams();
-  const connectorId = params.get("connector") ?? "";
+  const connectorId = uuidOrEmpty(params.get("connector"));
   const asked = (params.get("step") ?? "prepare") as StepId;
   // A step after Connect needs the connector; without one the walkthrough resumes at Connect.
   const step: StepId = !STEPS.some((s) => s.id === asked) ? "prepare" : !connectorId && !["prepare", "connect"].includes(asked) ? "connect" : asked;
@@ -182,7 +183,7 @@ function Steps({ info }: { info: SourceInfo }) {
           {step === "connect" && <ConnectStep info={info} connector={c ?? null} onNext={(id) => go("scope", { connector: id })} />}
           {step === "scope" && c && <ScopeStep connector={c} onNext={() => go("check")} />}
           {step === "check" && c && <CheckStep info={info} connector={c} onNext={() => go("finish")} onBack={() => go("connect")} />}
-          {step === "finish" && c && <FinishStep connector={c} runId={params.get("run") ?? ""} onRun={(id) => go("finish", { run: id })} onCheck={() => go("check")} />}
+          {step === "finish" && c && <FinishStep connector={c} runId={uuidOrEmpty(params.get("run"))} onRun={(id) => go("finish", { run: id })} onCheck={() => go("check")} />}
         </section>
       )}
     </>
