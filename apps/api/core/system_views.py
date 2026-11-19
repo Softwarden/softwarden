@@ -137,6 +137,7 @@ class SystemWarningSerializer(serializers.Serializer):
             "backup_key_missing",
             "backup_key_unacknowledged",
             "stored_secrets_unreadable",
+            "demo_password",
         ]
     )
     message = serializers.CharField()
@@ -156,8 +157,9 @@ class SystemStatusSerializer(serializers.Serializer):
     backup = BackupStatusSerializer(required=False, help_text="Absent in the `organization` view.")
     warnings = SystemWarningSerializer(
         many=True,
-        help_text="Problems to act on that never change `status` or `/readyz`: backups, and stored secrets "
-        "encrypted under a credential key that isn't configured (after a restore without the old key).",
+        help_text="Problems to act on that never change `status` or `/readyz`: backups, stored secrets "
+        "encrypted under a credential key that isn't configured (after a restore without the old key), and (the "
+        "`installation` view, outside development) demo accounts that still have seed_demo's published password.",
     )
 
 
@@ -204,7 +206,26 @@ def sees_installation(request, org) -> bool:
 
 def installation_status(org) -> dict[str, Any]:
     """The `installation` view: everything, with `org`'s jobs beside the installation-wide ones (None: those only)."""
-    return {**health.status(), "scope": "installation", "jobs": job_status(org)}
+    found = {**health.status(), "scope": "installation", "jobs": job_status(org)}
+    return {**found, "warnings": found["warnings"] + demo_warnings()}
+
+
+def demo_warnings() -> list[dict[str, str]]:
+    """`demo_password` while an active `@example.test` account still has seed_demo's published password
+    (outside DEBUG; core/demo.py). The operator's view only: the accounts are the installation's."""
+    from .demo import accounts_with_demo_password
+
+    found = accounts_with_demo_password()
+    if not found:
+        return []
+    return [
+        {
+            "code": "demo_password",
+            "message": f"{len(found)} demo account(s) still have the published demo password ({', '.join(found)}): "
+            "anyone can sign in as them. Deactivate or remove them in Users & roles, or set a new password with "
+            "manage.py reset_admin <email> --any-member.",
+        }
+    ]
 
 
 def organization_status(org) -> dict[str, Any]:

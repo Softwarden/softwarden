@@ -217,7 +217,8 @@ ISSUER_MAX = 500
 class UserIdentity(models.Model):
     """An identity provider's account pinned to a User at its first OIDC sign-in. Later sign-ins
     match on (issuer, subject) only, never on email again. Entra pins `https://login.microsoftonline.com/{tid}/v2.0`
-    and the `oid` claim; Google `https://accounts.google.com` and `sub`; Okta and generic providers `iss` and `sub`
+    and the `oid` claim; Google `https://accounts.google.com` (the development simulator's
+    `https://accounts.google.simulated.invalid`) and `sub`; Okta and generic providers `iss` and `sub`
     (core/oidc_discovery.identity_key). The identity belongs to the account, not to an organization (core 0011 moved
     the Entra rows here from tenant and object ID)."""
 

@@ -9,10 +9,13 @@ A provider is a preset over the same discovery-document client:
   or `https://{domain}/oauth2/{id}`. Pinned on `iss` + `sub`; `email_verified` is required.
 - `google`: `https://accounts.google.com/.well-known/openid-configuration`; the ID token's `iss` may be
   `https://accounts.google.com` or `accounts.google.com` (both are accepted and pinned as the first); `hd` must be one
-  of the configured Workspace domains and `email_verified` is required (it may arrive as the string "true").
+  of the configured Workspace domains and `email_verified` is required (it may arrive as the string "true"). A preset
+  whose Workspace domains are all under `.test` (RFC 6761: no Google Workspace can have one) is the simulator's
+  `https://accounts.google.simulated.invalid` instead, which only the simulator answers.
 - `oidc`: any https discovery URL ending in `/.well-known/openid-configuration`; its issuer must be the URL without
   that suffix (OpenID Connect Discovery 1.0 §4.3). Pinned on `iss` + `sub`; an `email_verified` that is present must
-  be true.
+  be true, and an existing member is linked by email only when it is (otherwise pending access). Microsoft
+  Entra's own sign-in hosts are refused here (core/sso.py): the `entra` preset pins the tenant.
 
 Every discovery document's `issuer` must equal the expected issuer, its endpoints must be https and it must list RS256
 or ES256 among `id_token_signing_alg_values_supported`; only those two algorithms are accepted, and only the ones the
@@ -50,8 +53,27 @@ ENTRA_HOST = graph.LOGIN_HOST
 GUID = graph.GUID
 WELL_KNOWN = "/.well-known/openid-configuration"
 GOOGLE_ISSUER = "https://accounts.google.com"
-GOOGLE_ISSUERS = frozenset({GOOGLE_ISSUER, "accounts.google.com"})
 GOOGLE_DISCOVERY = GOOGLE_ISSUER + WELL_KNOWN
+# The simulator's Google-shaped issuer (core/oidc_simulator.py): a reserved name that never resolves (RFC 2606), so it
+# can never stand in for Google's own accounts.google.com.
+SIMULATED_GOOGLE_ISSUER = "https://accounts.google.simulated.invalid"
+SIMULATED_GOOGLE_DISCOVERY = SIMULATED_GOOGLE_ISSUER + WELL_KNOWN
+# Workspace domains under this reserved top-level domain (RFC 6761) select the simulated Google issuer.
+SIMULATED_GOOGLE_TLD = ".test"
+# Microsoft Entra ID's sign-in hosts, the global service and the national clouds (Learn, "National clouds"): a generic
+# configuration naming one is refused (core/sso.py).
+ENTRA_LOGIN_HOSTS = frozenset(
+    {
+        ENTRA_HOST,
+        "login.microsoft.com",
+        "login.windows.net",
+        "sts.windows.net",
+        "login.microsoftonline.us",
+        "login.partner.microsoftonline.cn",
+        "login.chinacloudapi.cn",
+        "login.microsoftonline.de",
+    }
+)
 ALGORITHMS = ("RS256", "ES256")
 KEY_TYPES = {"RS256": "RSA", "ES256": "EC"}
 SCOPE = "openid profile email"
@@ -118,7 +140,20 @@ def okta_issuer(domain: str, server: str = "") -> str:
     return f"https://{domain}" + (f"/oauth2/{server}" if server else "")
 
 
-def urls(preset: str, tenant: str = "", okta_domain: str = "", okta_server: str = "", discovery_url: str = ""):
+def google_simulated(hosted_domains: Any) -> bool:
+    """Whether a Google preset's Workspace domains select the simulator: there are some, and all are under `.test`."""
+    domains = [str(d) for d in hosted_domains or ()]
+    return bool(domains) and all(d.lower().endswith(SIMULATED_GOOGLE_TLD) for d in domains)
+
+
+def urls(
+    preset: str,
+    tenant: str = "",
+    okta_domain: str = "",
+    okta_server: str = "",
+    discovery_url: str = "",
+    hosted_domains: Any = (),
+):
     """(discovery URL, expected issuer) for a preset's settings."""
     if preset == "entra":
         issuer = entra_issuer(entra_tenant(tenant))
@@ -127,6 +162,8 @@ def urls(preset: str, tenant: str = "", okta_domain: str = "", okta_server: str 
         issuer = okta_issuer(okta_domain, okta_server)
         return issuer + WELL_KNOWN, issuer
     if preset == "google":
+        if google_simulated(hosted_domains):
+            return SIMULATED_GOOGLE_DISCOVERY, SIMULATED_GOOGLE_ISSUER
         return GOOGLE_DISCOVERY, GOOGLE_ISSUER
     return discovery_url, discovery_url[: -len(WELL_KNOWN)] if discovery_url.endswith(WELL_KNOWN) else ""
 
@@ -391,7 +428,7 @@ def validate(provider: Provider, meta: Metadata, raw: str, nonce: str) -> dict[s
         raise ProviderError("signature", "The ID token's signature doesn't verify.") from None
     except jwt.PyJWTError:
         raise ProviderError("token_invalid", "The ID token isn't valid.") from None
-    issuers = GOOGLE_ISSUERS if provider.preset == "google" else {meta.issuer}
+    issuers = google_issuers(provider) if provider.preset == "google" else {meta.issuer}
     if claims.get("iss") not in issuers:
         raise ProviderError("issuer", "The ID token comes from another issuer.")
     aud = claims.get("aud")
@@ -419,12 +456,18 @@ def validate(provider: Provider, meta: Metadata, raw: str, nonce: str) -> dict[s
     return claims
 
 
+def google_issuers(provider: Provider) -> frozenset[str]:
+    """The `iss` values a Google preset accepts: its issuer with or without `https://` (Google sends either)."""
+    issuer = provider.issuer or GOOGLE_ISSUER
+    return frozenset({issuer, issuer.removeprefix("https://")})
+
+
 def identity_key(provider: Provider, claims: Mapping[str, Any]) -> tuple[str, str]:
     """(issuer, subject) an identity is pinned on (core.models.UserIdentity)."""
     if provider.preset == "entra":
         return entra_issuer(str(claims["tid"]).lower()), str(claims["oid"])
     if provider.preset == "google":
-        return GOOGLE_ISSUER, str(claims["sub"])
+        return provider.issuer or GOOGLE_ISSUER, str(claims["sub"])
     return str(claims["iss"]), str(claims["sub"])
 
 
@@ -457,9 +500,13 @@ def link_email(provider: Provider, claims: Mapping[str, Any]) -> str:
     """The email an existing member may be linked by on a first sign-in, or "".
     Only the `email` claim, never `preferred_username` (mutable; Learn: not for authorization decisions). For Entra
     only a member of the pinned tenant's (validate() has checked `tid`), never a guest's: a guest's email is whatever
-    their home directory says. "" sends the identity to pending access, where an Admin's approval links it."""
+    their home directory says. For a generic provider only an email it marks verified (`email_verified` true):
+    an unverified or unstated one could be any address its users can type. "" sends the identity to pending
+    access, where an Admin's approval links it."""
     value = claims.get("email")
     if provider.preset == "entra" and entra_guest(provider, claims):
+        return ""
+    if provider.preset == "oidc" and not verified(claims.get("email_verified")):
         return ""
     return value.strip().lower() if isinstance(value, str) else ""
 
@@ -493,11 +540,20 @@ def provider_label(issuer: str) -> str:
     host = (urllib.parse.urlsplit(issuer).hostname or "").lower() if "://" in issuer else issuer.lower()
     if host == ENTRA_HOST:
         return "Entra"
-    if host == "accounts.google.com":
+    if host in ("accounts.google.com", "accounts.google.simulated.invalid"):
         return "Google"
     if any(f".{host}".endswith(suffix) for suffix in OKTA_HOSTS):
         return "Okta"
     return host or "Single sign-on"
+
+
+def entra_login_host(url: str) -> bool:
+    """Whether a URL is on one of Microsoft Entra ID's public sign-in hosts (ENTRA_LOGIN_HOSTS)."""
+    try:
+        host = (urllib.parse.urlsplit(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    return host in ENTRA_LOGIN_HOSTS
 
 
 def describe(value: Any) -> str:

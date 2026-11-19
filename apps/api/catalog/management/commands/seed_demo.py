@@ -23,6 +23,7 @@ from catalog.models import (
     VendorRiskProfile,
 )
 from core import connections, simulation
+from core.demo import DEMO_PASSWORD
 from core.models import Membership, Organization, Role
 from discovery import engine as discovery
 from discovery.models import Connector, Observation
@@ -31,7 +32,6 @@ from imports.models import ImportSource
 from money import contracts, renewals
 from money.models import Contract, RenewalObligation
 
-DEMO_PASSWORD = "softwarden-demo-2026"  # local synthetic accounts only
 USERS = [
     ("admin@example.test", "Alex", "Admin", Role.ADMIN),
     ("editor@example.test", "Sam", "Editor", Role.EDITOR),
@@ -498,22 +498,34 @@ class Command(BaseCommand):
             "--accounts-only",
             action="store_true",
             help="Only the organization, accounts, people, teams and vendors (what the Playwright suite starts from), "
-            "plus platform@example.test, platform staff with no membership, on an _e2e database only.",
+            "plus platform@example.test, platform staff with no membership, on an _e2e database only. Like the full "
+            "demo, it runs only where simulators are allowed or on an _e2e database, and never resets the password "
+            "of an account that already exists.",
         )
 
     def handle(self, *args, accounts_only=False, **options):
         # The discovery scenario runs a connector on the simulated tenant: refuse before writing anything rather than
-        # leave a half-seeded demo. --accounts-only needs no simulator.
-        if not accounts_only and not simulation.allowed():
+        # leave a half-seeded demo. Every mode refuses on a server that allows no
+        # simulators, unless the database is a Playwright one (`_e2e`): the demo accounts' password is published.
+        if not (simulation.allowed() or e2e_database()):
+            if accounts_only:
+                raise CommandError(
+                    "seed_demo makes accounts whose password is published, and this server doesn't allow the demo "
+                    f"(DEBUG is off, {simulation.FLAG} is unset and the database isn't a Playwright _e2e one). Nothing "
+                    f"was changed. On a demo or test server, set {simulation.FLAG}=1 and run it again."
+                )
             raise CommandError(simulation.command_refused("seed_demo"))
         org, _ = Organization.objects.get_or_create(name="Contoso (synthetic)")
         User = get_user_model()
         for email, first, last, role in USERS:
             user, created = User.objects.get_or_create(username=email, defaults={"email": email})
             user.first_name, user.last_name, user.email = first, last, email
-            user.set_password(DEMO_PASSWORD)
+            if created:  # A rerun never resets a password someone has changed
+                user.set_password(DEMO_PASSWORD)
             user.save()
-            Membership.objects.update_or_create(
+            # A rerun never changes a membership that exists: an Admin may have changed the role, or made
+            # the account change its password.
+            Membership.objects.get_or_create(
                 user=user, organization=org, defaults={"role": role, "must_change_password": False}
             )
             if role == Role.ADMIN and org.coordinator_id is None:

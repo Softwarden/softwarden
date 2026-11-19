@@ -130,11 +130,14 @@ def _cookie_settings(tmp_path, **env: str) -> list[str]:
         SOFTWARDEN_SECRETS_DIR=str(tmp_path),
         SOFTWARDEN_SECRET_KEY="a-test-secret-key-that-is-long-enough-for-production-settings-0123456789",
         DJANGO_SETTINGS_MODULE="softwarden.settings",
+        POSTGRES_PASSWORD="a-test-database-password",
         **env,
     )
     result = subprocess.run(  # noqa: S603
-        [sys.executable, "-c", code], cwd=API, env=environ, capture_output=True, text=True, check=True
+        [sys.executable, "-c", code], cwd=API, env=environ, capture_output=True, text=True, check=False
     )
+    if result.returncode:
+        raise RuntimeError(result.stderr)
     return result.stdout.split()
 
 
@@ -144,4 +147,13 @@ def test_cookies_are_secure_by_default_when_debug_is_off(tmp_path):
     assert _cookie_settings(tmp_path, SOFTWARDEN_DEBUG="0") == ["True", "True"]
     assert _cookie_settings(tmp_path, SOFTWARDEN_DEBUG="0", SOFTWARDEN_SECURE_COOKIES="0") == ["False", "False"]
     assert _cookie_settings(tmp_path, SOFTWARDEN_DEBUG="1") == ["False", "False"]
-    assert _cookie_settings(tmp_path, SOFTWARDEN_DEBUG="1", SOFTWARDEN_SECURE_COOKIES="1") == ["True", "True"]
+    assert _cookie_settings(tmp_path, SOFTWARDEN_DEBUG="1", SOFTWARDEN_SECURE_COOKIES="0") == ["False", "False"]
+
+
+@pytest.mark.parametrize("extra", [{"SOFTWARDEN_SECURE_COOKIES": "1"}, {"SOFTWARDEN_DEPLOYMENT": "cloud"}])
+def test_debug_refuses_to_start_behind_tls_or_in_cloud_mode(tmp_path, extra):
+    """Development mode turns the sign-in simulators on, so it never runs on an installation that asks for
+    Secure cookies (Compose and Helm set SOFTWARDEN_SECURE_COOKIES=1) or in cloud mode."""
+    with pytest.raises(RuntimeError, match="SOFTWARDEN_DEBUG=1 is for local development only"):
+        _cookie_settings(tmp_path, SOFTWARDEN_DEBUG="1", **extra)
+    assert _cookie_settings(tmp_path, SOFTWARDEN_DEBUG="0", **extra) == ["True", "True"]

@@ -469,7 +469,16 @@ def test_seed_demo_refuses_with_the_flag_before_writing_anything(simulation_off,
     assert not Organization.objects.filter(name="Contoso (synthetic)").exists()
 
 
-def test_seed_demo_accounts_only_needs_no_simulator(simulation_off, db):
+def test_seed_demo_accounts_only_refuses_too_unless_the_database_is_a_playwright_one(simulation_off, db, monkeypatch):
+    """--accounts-only makes accounts with the published demo password, so it refuses on a server that
+    allows no simulators, before writing anything; the Playwright servers' `_e2e` databases are the exception."""
+    from catalog.management.commands import seed_demo
+
+    with pytest.raises(CommandError) as refused:
+        call_command("seed_demo", accounts_only=True, stdout=io.StringIO())
+    assert f"{FLAG}=1" in str(refused.value) and "Nothing was changed" in str(refused.value)
+    assert not Organization.objects.filter(name="Contoso (synthetic)").exists()
+    monkeypatch.setattr(seed_demo, "e2e_database", lambda: True)
     call_command("seed_demo", accounts_only=True, stdout=io.StringIO())
     assert Organization.objects.filter(name="Contoso (synthetic)").exists()
 

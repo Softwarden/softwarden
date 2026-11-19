@@ -105,6 +105,16 @@ WSGI_APPLICATION = "softwarden.wsgi.application"
 # and ran Windows short of ephemeral ports under load. Development servers (runserver: a thread per request) keep none,
 # except in cloud mode, which always keeps them (a managed server across a network).
 _conn_max_age = db_conn_max_age(default=60 if SOFTWARDEN_CLOUD or not DEBUG else 0)
+# The database password: the environment, else the secrets volume (the compose `init` service generates it), else, under
+# DEBUG only, the local development database's (compose.dev.yaml). Outside DEBUG a missing password stops start-up
+# instead of trying the published development one; `doctor` fails on the development password outside DEBUG.
+DEV_DB_PASSWORD = "softwarden-dev"  # noqa: S105
+_db_password = secret("POSTGRES_PASSWORD", "postgres_password")
+if not _db_password and not DEBUG:
+    raise ImproperlyConfigured(
+        "Set POSTGRES_PASSWORD (or provide postgres_password in SOFTWARDEN_SECRETS_DIR; Docker Compose's init service "
+        "generates it). Outside development there is no default database password (docs/ENV.md)."
+    )
 # A connection pooler in front of PostgreSQL must run in session mode, for the app and the worker alike: the backup lock
 # and the Graph mail slots are session advisory locks (tests/test_cloud_deployment.py lists them; docs/CLOUD.md).
 DATABASES = {
@@ -112,8 +122,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("POSTGRES_DB", "softwarden"),
         "USER": os.environ.get("POSTGRES_USER", "softwarden"),
-        # The local development database's password unless one is set or generated.
-        "PASSWORD": secret("POSTGRES_PASSWORD", "postgres_password", "softwarden-dev"),
+        "PASSWORD": _db_password or DEV_DB_PASSWORD,
         "HOST": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
         "PORT": os.environ.get("POSTGRES_PORT", "5434"),
         # 60 s by default (0 under DEBUG closes the connection after each request); the e2e
@@ -156,6 +165,14 @@ if os.environ.get("SOFTWARDEN_E2E") == "1" and (SOFTWARDEN_CLOUD or SESSION_COOK
     raise ImproperlyConfigured(
         "SOFTWARDEN_E2E=1 is for the Playwright test server only; unset it (it can't be combined with "
         "SOFTWARDEN_DEPLOYMENT=cloud or with Secure cookies, which are on unless SOFTWARDEN_DEBUG=1)."
+    )
+# Development mode turns on the sign-in simulators, which sign anyone in as any email. A hosted installation,
+# or one that asks for Secure cookies (it is behind TLS, so people reach it), is never a development server: DEBUG
+# with cloud mode or an explicit SOFTWARDEN_SECURE_COOKIES=1 (Compose and Helm set it) refuses to start.
+if DEBUG and (SOFTWARDEN_CLOUD or os.environ.get("SOFTWARDEN_SECURE_COOKIES", "").strip() == "1"):
+    raise ImproperlyConfigured(
+        "SOFTWARDEN_DEBUG=1 is for local development only; unset it (it can't be combined with "
+        "SOFTWARDEN_DEPLOYMENT=cloud or with SOFTWARDEN_SECURE_COOKIES=1, which Docker Compose and Helm set)."
     )
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"

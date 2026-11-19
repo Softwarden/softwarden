@@ -20639,7 +20639,7 @@ export interface components {
             jobs: components["schemas"]["JobsStatus"];
             /** @description Absent in the `organization` view. */
             backup?: components["schemas"]["BackupStatus"];
-            /** @description Problems to act on that never change `status` or `/readyz`: backups, and stored secrets encrypted under a credential key that isn't configured (after a restore without the old key). */
+            /** @description Problems to act on that never change `status` or `/readyz`: backups, stored secrets encrypted under a credential key that isn't configured (after a restore without the old key), and (the `installation` view, outside development) demo accounts that still have seed_demo's published password. */
             warnings: components["schemas"]["SystemWarning"][];
         };
         /**
@@ -20665,6 +20665,7 @@ export interface components {
          *     * `backup_key_missing` - backup_key_missing
          *     * `backup_key_unacknowledged` - backup_key_unacknowledged
          *     * `stored_secrets_unreadable` - stored_secrets_unreadable
+         *     * `demo_password` - demo_password
          * @enum {string}
          */
         SystemWarningCodeEnum: "backup_stale" | "backup_failed" | "backup_key_missing" | "backup_key_unacknowledged" | "stored_secrets_unreadable";

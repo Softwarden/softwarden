@@ -52,9 +52,11 @@ def one(document, name, org=""):
 
 
 @pytest.fixture
-def server(settings, tmp_path):
+def server(settings, tmp_path, monkeypatch):
     """A production-shaped installation: debug off, HTTPS address on an accepted host, secure cookies, SMTP set, the
-    worker ticking and backups configured with an acknowledged key and a recent set."""
+    worker ticking and backups configured with an acknowledged key and a recent set. The test database's password is
+    the development one (compose.dev.yaml, CI), so the check that refuses it compares with another value."""
+    monkeypatch.setattr("softwarden.settings.DEV_DB_PASSWORD", "not-the-test-database-password")
     settings.DEBUG = False
     settings.SECRET_KEY = DJANGO_KEY
     settings.SOFTWARDEN_BASE_URL = "https://softwarden.example.test"
@@ -137,6 +139,8 @@ def test_a_healthy_server_exits_zero(db, server):
         "credential_keys",
         "email",
         "dns_resolver",
+        "database_password",
+        "demo_accounts",
     )
     for name in names:
         assert one(document, name)["status"] == "ok", one(document, name)
@@ -171,7 +175,7 @@ def test_an_unreachable_database_fails_and_skips_what_needs_it(db, monkeypatch):
     document, code = as_json()
     assert code == 1 and one(document, "database")["status"] == "fail"
     names = {c["name"] for c in document["checks"]}
-    assert names == {"database", "mode", "base_url", "credential_keys"}
+    assert names == {"database", "mode", "database_password", "base_url", "credential_keys"}
 
 
 def test_a_check_that_raises_is_a_failure_naming_only_the_error_type(db, server, monkeypatch):
@@ -213,6 +217,45 @@ def test_debug_mode_is_a_warning(db, server, settings):
     settings.DEBUG = True
     check = one(as_json()[0], "mode")
     assert check["status"] == "warn" and "SOFTWARDEN_DEBUG" in check["message"]
+
+
+def test_the_development_database_password_fails_outside_debug(db, server, settings, monkeypatch):
+    """Settings.py uses softwarden-dev only under DEBUG; set by hand on a server, doctor fails, without
+    printing it."""
+    password = str(settings.DATABASES["default"]["PASSWORD"])
+    assert one(as_json()[0], "database_password")["status"] == "ok"
+    monkeypatch.setattr("softwarden.settings.DEV_DB_PASSWORD", password)
+    document, code = as_json()
+    check = one(document, "database_password")
+    assert check["status"] == "fail" and code != 0 and "POSTGRES_PASSWORD" in check["fix"]
+    assert password not in json.dumps(document)
+    settings.DEBUG = True
+    assert one(as_json()[0], "database_password")["status"] == "ok"
+
+
+def test_demo_accounts_with_the_published_password_warn_outside_debug(db, server, settings):
+    """An active @example.test account that still has seed_demo's password is a warning (never in DEBUG);
+    one whose password changed, or that is deactivated, isn't."""
+    from django.contrib.auth import get_user_model
+
+    from core.demo import DEMO_PASSWORD
+
+    User = get_user_model()
+    assert one(as_json()[0], "demo_accounts")["status"] == "ok"
+    demo = User.objects.create_user("admin@example.test", "admin@example.test", DEMO_PASSWORD)
+    changed = User.objects.create_user("editor@example.test", "editor@example.test", "a-new-long-password-1")
+    User.objects.create_user("viewer@example.test", "viewer@example.test", DEMO_PASSWORD, is_active=False)
+    User.objects.create_user("someone@contoso.example", "someone@contoso.example", DEMO_PASSWORD)
+    check = one(as_json()[0], "demo_accounts")
+    assert check["status"] == "warn" and "1 demo account(s)" in check["message"] and demo.username in check["message"]
+    assert changed.username not in check["message"] and "viewer@" not in check["message"]
+    assert DEMO_PASSWORD not in check["message"] + check["fix"]
+    demo.set_password("another-long-password-2")
+    demo.save()
+    assert one(as_json()[0], "demo_accounts")["status"] == "ok"
+    settings.DEBUG = True
+    User.objects.create_user("platform@example.test", "platform@example.test", DEMO_PASSWORD)
+    assert one(as_json()[0], "demo_accounts")["status"] == "ok"
 
 
 def test_a_stale_worker_and_an_overdue_schedule_fail(db, server):

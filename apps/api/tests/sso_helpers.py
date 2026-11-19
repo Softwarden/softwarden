@@ -36,7 +36,7 @@ def activate(org, provider="entra", client_id=CLIENT_ID, secret=SECRET, **values
     presets: dict[str, dict[str, Any]] = {
         "entra": {"tenant": "simulated"},
         "okta": {"okta_domain": oidc_simulator.OKTA_DOMAIN, "okta_server": "default"},
-        "google": {"hosted_domains": [f"{org.slug}.test"]},
+        "google": {"hosted_domains": [f"{org.slug}.test"]},  # .test: the simulated Google issuer
         "oidc": {"discovery_url": oidc_simulator.IDPS["okta"].discovery_url},
     }
     defaults = presets[provider] | values
@@ -46,6 +46,7 @@ def activate(org, provider="entra", client_id=CLIENT_ID, secret=SECRET, **values
         defaults.get("okta_domain", ""),
         defaults.get("okta_server", ""),
         defaults.get("discovery_url", ""),
+        defaults.get("hosted_domains", ()),
     )
     row, _ = SsoSettings.objects.get_or_create(organization=org)
     for prefix in ("", "draft_"):

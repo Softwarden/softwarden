@@ -293,7 +293,7 @@ def multi_org_user(request):
     switcher). Idempotent. Synthetic data in the throwaway e2e database only."""
     from django.contrib.auth import get_user_model
 
-    from catalog.management.commands.seed_demo import DEMO_PASSWORD
+    from core.demo import DEMO_PASSWORD
     from core.models import Membership, Organization, Role
 
     org, role = org_role(request)
@@ -504,8 +504,8 @@ def make_enterprise_org(which: str = "compliance"):
     from django.contrib.auth import get_user_model
 
     from catalog import compliance
-    from catalog.management.commands.seed_demo import DEMO_PASSWORD
     from core import capabilities
+    from core.demo import DEMO_PASSWORD
     from core.models import Membership, Organization, Role
 
     org_name, email, first, last = ENTERPRISE_ORGS[which]
@@ -565,8 +565,8 @@ def make_custom_fields_org():
     Returns the organization."""
     from django.contrib.auth import get_user_model
 
-    from catalog.management.commands.seed_demo import DEMO_PASSWORD
     from catalog.models import Department, Person, Team, Vendor
+    from core.demo import DEMO_PASSWORD
     from core.models import Membership, Organization
 
     org, _ = Organization.objects.get_or_create(name=CUSTOM_FIELDS_ORG)
@@ -778,8 +778,8 @@ def make_spec_org(which: str = "quality"):
 
     from catalog import quality
     from catalog.attachments import ORG_KEYS
-    from catalog.management.commands.seed_demo import DEMO_PASSWORD
     from catalog.models import Department, Person, Team, Vendor
+    from core.demo import DEMO_PASSWORD
     from core.models import Membership, Organization
 
     name, users, domain = SPEC_ORGS[which]

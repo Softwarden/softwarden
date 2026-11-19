@@ -9,6 +9,7 @@ from django.core.management import call_command
 
 from catalog.management.commands.seed_demo import SAMPLE_CSV
 from catalog.models import AIModel, AIProvider, Integration, Relationship, Resource, SavedFilter, Tag
+from core.demo import DEMO_PASSWORD, DEMO_USERNAMES
 from core.models import Organization
 from discovery import engine as discovery
 from discovery.models import Connector, Observation, ReconciliationDecision
@@ -49,7 +50,7 @@ def test_accounts_only_makes_a_platform_staff_account_on_an_e2e_database(monkeyp
     seed(accounts_only=True)
     seed(accounts_only=True)
     user = get_user_model().objects.get(username=email)
-    assert user.email == "platform@example.test" and user.is_active and user.check_password(seed_demo.DEMO_PASSWORD)
+    assert user.email == "platform@example.test" and user.is_active and user.check_password(DEMO_PASSWORD)
     assert PlatformStaff.objects.filter(user=user).exists()
     assert not Membership.objects.filter(user=user).exists()
     assert PlatformAuditEvent.objects.filter(action="staff.granted").count() == 1  # granted once, audited once
@@ -253,3 +254,40 @@ def test_contracts_scenario_feeds_the_dashboard_and_reports_and_is_not_repeated(
     dashboard = client(api, "admin@example.test").get("dashboard").json_body
     names = {r["name"] for r in dashboard["deadlines"]["rows"]}
     assert {"Zoom Business", "ServiceDesk Plus license"} <= names
+
+
+def test_a_rerun_never_resets_an_existing_accounts_password_or_membership():
+    """New demo accounts get the demo password; one that already exists keeps whatever password it has, and
+    an existing membership keeps its role and must-change-password flag."""
+    from catalog.management.commands.seed_demo import USERS
+    from core.models import Membership, Role
+
+    org = seed(accounts_only=True)
+    User = get_user_model()
+    admin = User.objects.get(username=USERS[0][0])
+    assert admin.check_password(DEMO_PASSWORD)
+    admin.set_password("the-admins-own-long-password")
+    admin.save()
+    seed(accounts_only=True)
+    seed()
+    admin.refresh_from_db()
+    assert admin.check_password("the-admins-own-long-password") and not admin.check_password(DEMO_PASSWORD)
+    assert User.objects.get(username=USERS[1][0]).check_password(DEMO_PASSWORD)  # untouched, still the demo one
+    # An Admin demotes the demo Admin and makes the Editor change their password: a rerun leaves both alone.
+    Membership.objects.filter(user=admin, organization=org).update(role=Role.VIEWER)
+    editor = User.objects.get(username=USERS[1][0])
+    Membership.objects.filter(user=editor, organization=org).update(must_change_password=True)
+    seed(accounts_only=True)
+    assert Membership.objects.get(user=admin, organization=org).role == Role.VIEWER
+    assert Membership.objects.get(user=editor, organization=org).must_change_password is True
+    # A demo account without a membership (removed from the organization) gets one back, with its demo role.
+    Membership.objects.filter(user=editor, organization=org).delete()
+    seed(accounts_only=True)
+    assert Membership.objects.get(user=editor, organization=org).role == Role.EDITOR
+
+
+def test_the_demo_password_check_knows_every_account_seed_demo_makes():
+    """core/demo.py checks seed_demo's accounts by name: the two lists stay in step."""
+    from catalog.management.commands.seed_demo import PLATFORM_STAFF, USERS
+
+    assert set(DEMO_USERNAMES) == {u[0] for u in USERS} | {PLATFORM_STAFF[0]}

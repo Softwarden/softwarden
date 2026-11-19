@@ -94,10 +94,10 @@ def load_settings(**extra: str) -> dict:
         "'deployment': s.SOFTWARDEN_DEPLOYMENT, 'cloud': s.SOFTWARDEN_CLOUD, 'signup': s.SOFTWARDEN_SIGNUP_ENABLED, "
         "'private': s.SOFTWARDEN_ALLOW_PRIVATE_SERVICE_HOSTS, 'any_port': s.SOFTWARDEN_SMTP_ANY_PORT, "
         "'age': d['CONN_MAX_AGE'], "
-        "'checks': d['CONN_HEALTH_CHECKS'], 'options': d['OPTIONS']}))"
+        "'checks': d['CONN_HEALTH_CHECKS'], 'options': d['OPTIONS'], 'password': d['PASSWORD']}))"
     )
     environ = {k: v for k, v in os.environ.items() if k not in SETTINGS_VARS}
-    environ.update(DJANGO_SETTINGS_MODULE="softwarden.settings", **extra)
+    environ.update({"DJANGO_SETTINGS_MODULE": "softwarden.settings", "POSTGRES_PASSWORD": "a-test-password", **extra})
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-c", code], cwd=API, env=environ, capture_output=True, text=True
     )
@@ -123,8 +123,12 @@ def test_production_keeps_connections_for_60_seconds():
     assert got["age"] == 0 and got["checks"] is False
 
 
+# Cloud mode is never a development server (DEBUG with cloud mode refuses to start).
+PRODUCTION = {"SOFTWARDEN_DEBUG": "0", "SOFTWARDEN_SECRET_KEY": "cloud-" + "x" * 50}
+
+
 def test_cloud_mode_changes_the_installation_defaults():
-    got = load_settings(SOFTWARDEN_DEPLOYMENT="cloud", POSTGRES_SSLMODE="require")
+    got = load_settings(SOFTWARDEN_DEPLOYMENT="cloud", POSTGRES_SSLMODE="require", **PRODUCTION)
     assert got["deployment"] == "cloud" and got["cloud"] is True
     assert got["signup"] is True  # signup defaults on
     assert got["private"] is False  # an organization's own servers must be public
@@ -139,8 +143,17 @@ def test_explicit_settings_win_over_the_cloud_defaults():
         SOFTWARDEN_SIGNUP_ENABLED="0",
         SOFTWARDEN_ALLOW_PRIVATE_SERVICE_HOSTS="1",
         SOFTWARDEN_DB_CONN_MAX_AGE="0",
+        **PRODUCTION,
     )
     assert got["signup"] is False and got["private"] is True and got["age"] == 0
+
+
+def test_production_needs_a_database_password():
+    """Outside DEBUG there is no default database password; under DEBUG the development one still applies."""
+    with pytest.raises(RuntimeError, match="Set POSTGRES_PASSWORD"):
+        load_settings(POSTGRES_PASSWORD="", SOFTWARDEN_SECRETS_DIR=str(API / "no-secrets-here"), **PRODUCTION)
+    got = load_settings(POSTGRES_PASSWORD="", SOFTWARDEN_SECRETS_DIR=str(API / "no-secrets-here"), SOFTWARDEN_DEBUG="1")
+    assert got["password"] == "softwarden-dev"
 
 
 def test_a_bad_deployment_stops_start_up():

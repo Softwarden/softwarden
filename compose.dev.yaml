@@ -1,7 +1,8 @@
 # Development overrides, layered on compose.yaml:
 #   docker compose -f compose.yaml -f compose.dev.yaml up -d db     the database for runserver, Vite and Playwright
 #   docker compose -f compose.yaml -f compose.dev.yaml up -d --build the full stack, also on http://127.0.0.1:8080
-# The database password is the fixed development one (settings.py falls back to it), unless POSTGRES_PASSWORD is set.
+# The database password is the fixed development one (settings.py falls back to it under SOFTWARDEN_DEBUG=1 only), unless
+# POSTGRES_PASSWORD is set.
 # The dev stack keeps its data in volumes of its own (softwarden-dev-*, below), so it never meets the plain stack's
 # database and secrets: a plain `docker compose up` generates a password into softwarden-db/softwarden-secrets, this file
 # uses softwarden-dev for softwarden-dev-db/softwarden-dev-secrets, and switching between the two needs no `down -v`.

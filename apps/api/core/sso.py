@@ -289,7 +289,10 @@ def _simulated_ok(row: SsoSettings, prefix: str) -> bool:
         from ee.saml.idp import SIMULATED_ENTITY_ID
 
         return getattr(row, f"{prefix}saml_entity_id") != SIMULATED_ENTITY_ID or allowed()
-    return getattr(row, f"{prefix}tenant") != oidc_discovery.SIMULATED or allowed()
+    simulated = getattr(row, f"{prefix}tenant") == oidc_discovery.SIMULATED or (
+        getattr(row, f"{prefix}discovery_url") == oidc_discovery.SIMULATED_GOOGLE_DISCOVERY
+    )
+    return not simulated or allowed()
 
 
 def saml_of(row: SsoSettings, draft: bool) -> SamlIdp | None:
@@ -476,6 +479,16 @@ def _domains(value: Any, key: str, errors: dict, limit: int = DOMAINS_MAX) -> li
     return sorted(out)
 
 
+GOOGLE_TEST_DOMAINS = (
+    "Workspace domains under .test are for development only: they select the simulated Google provider, which this "
+    "installation doesn't allow. Enter your Google Workspace domain."
+)
+ENTRA_THROUGH_GENERIC = (
+    "This is a Microsoft Entra ID address. Choose the Microsoft Entra ID provider instead and enter your directory "
+    "(tenant) ID: it accepts sign-ins from your tenant only."
+)
+
+
 def _set_values(row: SsoSettings, data: dict[str, Any], errors: dict) -> None:
     from .oidc_simulator import allowed
 
@@ -518,6 +531,13 @@ def _set_values(row: SsoSettings, data: dict[str, Any], errors: dict) -> None:
         row.draft_discovery_url = url
     if "hosted_domains" in data:
         row.draft_hosted_domains = _domains(data["hosted_domains"], "hosted_domains", errors, 20)
+    if (
+        row.draft_provider == "google"
+        and "hosted_domains" not in errors
+        and oidc_discovery.google_simulated(row.draft_hosted_domains)
+        and not allowed()
+    ):
+        errors["hosted_domains"] = [GOOGLE_TEST_DOMAINS]
     if "client_id" in data:
         row.draft_client_id = _text(data["client_id"], "client_id", errors, CLIENT_ID_MAX)
     _set_saml_values(row, data, errors)
@@ -533,10 +553,21 @@ def _set_values(row: SsoSettings, data: dict[str, Any], errors: dict) -> None:
         row.draft_issuer = oidc_discovery.saml_issuer(row.organization_id, entity) if entity else ""
     elif preset == "oidc":
         row.draft_issuer = oidc_discovery.urls("oidc", discovery_url=row.draft_discovery_url)[1]
+        if "discovery_url" not in errors and oidc_discovery.entra_login_host(row.draft_discovery_url):
+            # A tenant-specific discovery URL does pin `iss`, but Entra documents no `email_verified` claim
+            # and its `email` is mutable and set by administrators (a B2B guest's comes from their home directory), so
+            # the generic preset's email linking can't be trusted. The entra preset keys identities on `tid` + `oid`.
+            errors["discovery_url"] = [ENTRA_THROUGH_GENERIC]
     elif preset:
         complete = {"entra": bool(row.draft_tenant), "okta": bool(row.draft_okta_domain), "google": True}[preset]
         url, issuer = (
-            oidc_discovery.urls(preset, row.draft_tenant, row.draft_okta_domain, row.draft_okta_server)
+            oidc_discovery.urls(
+                preset,
+                row.draft_tenant,
+                row.draft_okta_domain,
+                row.draft_okta_server,
+                hosted_domains=row.draft_hosted_domains,
+            )
             if complete
             else ("", "")
         )
@@ -762,6 +793,8 @@ def start_test(org, actor, session, draft_revision: Any) -> dict[str, Any]:
         if not _simulated_ok(row, "draft_"):
             if row.draft_provider == SsoProvider.SAML:
                 raise FieldErrors({"idp_entity_id": ["This identity provider can't be used on this installation."]})
+            if row.draft_provider == "google":
+                raise FieldErrors({"hosted_domains": [GOOGLE_TEST_DOMAINS]})
             raise FieldErrors({"tenant_id": ["Enter the directory (tenant) ID, a GUID."]})
         config = _test_config(row)
     if config.saml is not None:

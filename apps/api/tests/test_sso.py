@@ -110,12 +110,12 @@ def test_google_workspace_and_generic_oidc(a, b, simulator):
     activate(b["org"], "oidc")  # the Okta-shaped simulator through its discovery URL
     google = Client()
     # Google may send iss without the scheme and email_verified as a string; both are accepted and pinned the same.
-    done = sign_in_with(
-        google, "admin@orga.test", {"iss": "accounts.google.com", "email_verified": "true"}, {"org": "orga"}
-    )
+    # Workspace domains under .test are the simulator's Google-shaped issuer, never accounts.google.com.
+    bare = oidc_discovery.SIMULATED_GOOGLE_ISSUER.removeprefix("https://")
+    done = sign_in_with(google, "admin@orga.test", {"iss": bare, "email_verified": "true"}, {"org": "orga"})
     assert done["Location"] == "/dashboard"
     identity = UserIdentity.objects.get(user=a["users"]["admin"])
-    assert identity.issuer == "https://accounts.google.com"
+    assert identity.issuer == oidc_discovery.SIMULATED_GOOGLE_ISSUER
     assert sign_in(Client(), "admin@orga.test", query={"org": "orga"})["Location"] == "/renewals"  # the same pin
     assert sign_in(Client(), "admin@orgb.test", query={"org": "orgb"})["Location"] == "/renewals"
     assert UserIdentity.objects.get(user=b["users"]["admin"]).issuer == OKTA_ISSUER
@@ -370,8 +370,11 @@ def test_draft_validation_and_the_secret_stays_write_only(a, api, simulator):
     google = admin.patch("sso/settings", {"provider": "google", "hosted_domains": ["OrgA.test", "orga.test"]}).json_body
     assert (
         google["draft"]["hosted_domains"] == ["orga.test"]
-        and google["draft"]["issuer"] == "https://accounts.google.com"
+        and google["draft"]["issuer"] == oidc_discovery.SIMULATED_GOOGLE_ISSUER  # .test domains: the simulator's
     )
+    real = admin.patch("sso/settings", {"hosted_domains": ["orga.example"]}).json_body["draft"]
+    assert real["issuer"] == "https://accounts.google.com"
+    assert real["discovery_url"] == "https://accounts.google.com/.well-known/openid-configuration"
     custom = admin.patch(
         "sso/settings",
         {"provider": "okta", "okta_domain": "example.okta.com", "okta_authorization_server": "aus1"},
@@ -852,7 +855,9 @@ def test_cloud_mode_verifies_domains_by_default():
     from pathlib import Path
 
     code = "import django; django.setup(); from django.conf import settings as s; print(s.SOFTWARDEN_SSO_DOMAIN_VERIFICATION)"
-    env = {**os.environ, "DJANGO_SETTINGS_MODULE": "softwarden.settings", "SOFTWARDEN_DEBUG": "1"}
+    # Production mode: DEBUG can't be combined with cloud mode.
+    env = {**os.environ, "DJANGO_SETTINGS_MODULE": "softwarden.settings", "SOFTWARDEN_DEBUG": "0"}
+    env |= {"SOFTWARDEN_SECRET_KEY": "sso-test-" + "x" * 50, "POSTGRES_PASSWORD": "test-db-password"}
     env.pop("SOFTWARDEN_SSO_DOMAIN_VERIFICATION", None)
     root = Path(__file__).resolve().parents[1]
     for deployment, expected in (("cloud", "True"), ("selfhosted", "False")):
@@ -1130,3 +1135,161 @@ def test_stray_datagrams_cannot_stretch_the_timeout(monkeypatch, settings):
         assert time.monotonic() - started < 1.5
     finally:
         resolver.close()
+
+
+# ---- Sign-in configuration guards ----------------------------------------------------------------------------
+
+
+def test_a_real_google_preset_goes_to_google_even_with_debug_on(simulator, monkeypatch):
+    """The simulator is never Google's accounts.google.com, so with DEBUG on a real Workspace domain's
+    discovery goes to the network path, and only `.test` domains reach the simulator's own issuer."""
+    from core import graph
+
+    url, issuer = oidc_discovery.urls("google", hosted_domains=["contoso.example"])
+    assert (url, issuer) == (oidc_discovery.GOOGLE_DISCOVERY, oidc_discovery.GOOGLE_ISSUER)
+    assert oidc_simulator.answer("GET", url, None, {}) is None
+    assert not any(
+        "accounts.google.com" in u for idp in oidc_simulator.IDPS.values() for u in (idp.issuer, idp.discovery_url)
+    )
+    fetched = []
+
+    def network(method, target, body, headers):
+        fetched.append((method, target))
+        return graph.Reply(503, {}, b"")
+
+    monkeypatch.setattr(oidc_discovery, "network", network)
+    provider = oidc_discovery.Provider("google", url, issuer, "client", hosted_domains=("contoso.example",))
+    with pytest.raises(oidc_discovery.ProviderError) as failed:
+        oidc_discovery.metadata(provider)
+    assert failed.value.code == "fetch_failed" and fetched == [("GET", oidc_discovery.GOOGLE_DISCOVERY)]
+    # Real Google sends iss with or without the scheme; the simulated issuer is not one of them.
+    assert oidc_discovery.google_issuers(provider) == {"https://accounts.google.com", "accounts.google.com"}
+    simulated = oidc_discovery.urls("google", hosted_domains=["orga.test", "orgb.test"])
+    assert simulated == (oidc_discovery.SIMULATED_GOOGLE_DISCOVERY, oidc_discovery.SIMULATED_GOOGLE_ISSUER)
+    assert (
+        oidc_discovery.urls("google", hosted_domains=["orga.test", "contoso.example"])[1]
+        == oidc_discovery.GOOGLE_ISSUER
+    )
+
+
+def test_a_simulated_google_configuration_is_off_where_the_simulator_is_not_allowed(a, simulator, settings):
+    activate(a["org"], "google")  # Workspace domain orga.test: the simulator's issuer
+    assert sso.effective(a["org"]) is not None
+    settings.DEBUG = False
+    assert sso.effective(a["org"]) is None
+
+
+def test_a_generic_provider_links_by_a_verified_email_only(a, api, simulator):
+    """Through the generic preset an existing member is linked by email only when the ID token says the email
+    is verified; otherwise the identity waits in pending access (auto-provision on) or is refused."""
+    from core.models import PendingAccess
+
+    activate(a["org"], "oidc")  # the Okta-shaped simulator through its discovery URL
+    admin = a["users"]["admin"]
+    unverified = {"email_verified": oidc_simulator.OMIT}
+    done = sign_in_with(Client(), admin.email, unverified, {"org": "orga"})
+    assert done["Location"].startswith("/login?error=no_account")
+    assert not UserIdentity.objects.filter(user=admin).exists()
+    assert api(admin).patch("organization", {"sso_auto_provision": True}).status_code == 200
+    client = Client()
+    done = sign_in_with(client, admin.email, unverified, {"org": "orga"})
+    assert done["Location"] == "/login?error=access_pending&org=orga"
+    assert client.get("/api/v1/auth/me").status_code == 403
+    assert PendingAccess.objects.filter(organization=a["org"], email=admin.email).exists()
+    assert not UserIdentity.objects.filter(user=admin).exists()
+    # A verified email links as before.
+    assert sign_in(Client(), admin.email, query={"org": "orga"})["Location"] == "/renewals"
+    assert UserIdentity.objects.filter(user=admin, issuer=OKTA_ISSUER).exists()
+
+
+def test_link_email_by_preset():
+    claims = {"iss": OKTA_ISSUER, "sub": "s", "email": "Alex@Example.com"}
+    generic = oidc_discovery.Provider("oidc", OKTA_ISSUER + oidc_discovery.WELL_KNOWN, OKTA_ISSUER, "c")
+    assert oidc_discovery.link_email(generic, claims) == ""
+    assert oidc_discovery.link_email(generic, {**claims, "email_verified": False}) == ""
+    assert oidc_discovery.link_email(generic, {**claims, "email_verified": True}) == "alex@example.com"
+    assert oidc_discovery.link_email(generic, {**claims, "email_verified": "true"}) == "alex@example.com"
+    okta = oidc_discovery.Provider("okta", OKTA_ISSUER + oidc_discovery.WELL_KNOWN, OKTA_ISSUER, "c")
+    assert oidc_discovery.link_email(okta, {**claims, "email_verified": True}) == "alex@example.com"
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "login.microsoftonline.com",
+        "LOGIN.MICROSOFTONLINE.COM",
+        "login.microsoft.com",
+        "login.windows.net",
+        "sts.windows.net",
+        "login.microsoftonline.us",
+        "login.partner.microsoftonline.cn",
+        "login.chinacloudapi.cn",
+        "login.microsoftonline.de",
+    ],
+)
+def test_a_generic_provider_on_entras_sign_in_host_is_refused(a, api, simulator, host):
+    """Entra through the generic preset pins no tenant; the Admin is sent to the entra preset."""
+    admin = api(a["users"]["admin"])
+    url = f"https://{host}/0a1b2c3d-0000-4000-8000-000000000001/v2.0/.well-known/openid-configuration"
+    response = admin.patch("sso/settings", {"provider": "oidc", "discovery_url": url})
+    assert response.status_code == 400
+    assert response.json_body["errors"]["discovery_url"] == [sso.ENTRA_THROUGH_GENERIC]
+    assert "Microsoft Entra ID provider" in sso.ENTRA_THROUGH_GENERIC
+    # Saved on another preset first, then switched to generic: refused all the same.
+    assert admin.patch("sso/settings", {"provider": "okta", "okta_domain": "example.okta.com"}).status_code == 200
+    row = SsoSettings.objects.get(organization=a["org"])
+    SsoSettings.objects.filter(pk=row.pk).update(draft_discovery_url=url)
+    switched = admin.patch("sso/settings", {"provider": "oidc"})
+    assert switched.status_code == 400 and "discovery_url" in switched.json_body["errors"]
+
+
+def test_a_generic_test_sign_in_without_a_verified_email_says_so(a, api, simulator):
+    """The draft's test sign-in through a generic provider that doesn't mark the Admin's email verified fails
+    and names email_verified, instead of a generic "not your account" (core/oidc.own_account)."""
+    admin = api(a["users"]["admin"])
+    draft = {
+        "provider": "oidc",
+        "discovery_url": oidc_simulator.IDPS["okta"].discovery_url,
+        "client_id": "generic-client",
+        "client_secret": SECRET,
+    }
+    assert admin.patch("sso/settings", draft).status_code == 200
+    started = admin.post("sso/settings/test", {"draft_revision": 1}).json_body
+    params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(started["authorize_url"]).query))
+    code = oidc_simulator.issue_code(
+        params, "admin@orga.test", idp=params["idp"], overrides={"email_verified": oidc_simulator.OMIT}
+    )
+    state = urllib.parse.quote(params["state"], safe="")
+    done = admin.client.get(f"/api/v1/auth/oidc/callback?code={code}&state={state}")
+    assert done["Location"] == "/admin/sign-in?sso_test=failed&reason=other_account"
+    test = admin.get("sso/settings").json_body["draft"]["test"]
+    assert test["ok"] is False and "email_verified" in test["detail"] and "pending access" in test["detail"]
+
+
+def test_test_domains_for_google_are_refused_where_the_simulator_is_not_allowed(a, api, settings):
+    """A Google draft whose Workspace domains are all under .test selects the simulator; where it isn't
+    allowed the draft says so on `hosted_domains`, and a draft saved earlier refuses its test with the same words."""
+    settings.SOFTWARDEN_BASE_URL = "http://testserver"
+    settings.DEBUG = False
+    admin = api(a["users"]["admin"])
+    refused = admin.patch("sso/settings", {"provider": "google", "hosted_domains": ["orga.test"]})
+    assert refused.status_code == 400
+    assert refused.json_body["errors"]["hosted_domains"] == [sso.GOOGLE_TEST_DOMAINS]
+    real = admin.patch(
+        "sso/settings",
+        {
+            "provider": "google",
+            "hosted_domains": ["orga.example", "orga.test"],
+            "client_id": "g",
+            "client_secret": SECRET,
+        },
+    )
+    assert real.status_code == 200 and real.json_body["draft"]["issuer"] == oidc_discovery.GOOGLE_ISSUER
+    # Saved while the simulator was allowed, then tested where it isn't.
+    settings.DEBUG = True
+    saved = admin.patch("sso/settings", {"hosted_domains": ["orga.test"], "client_secret": SECRET})
+    assert saved.status_code == 200, saved.json_body["errors"]
+    settings.DEBUG = False
+    revision = admin.get("sso/settings").json_body["draft"]["revision"]
+    test = admin.post("sso/settings/test", {"draft_revision": revision})
+    assert test.status_code == 400 and test.json_body["errors"]["hosted_domains"] == [sso.GOOGLE_TEST_DOMAINS]

@@ -302,6 +302,14 @@ def own_account(claims, config: sso.Config, admin) -> tuple[bool, str, str]:
     else:
         own = {(admin.email or "").lower(), (admin.username or "").lower()} - {""}
         mine = bool(email) and email in own and not UserIdentity.objects.filter(user=admin, issuer=issuer).exists()
+        if not mine and not email and shown in own and config.provider.preset == "oidc":
+            return (  # A generic provider links by an email it says is verified only
+                False,
+                "other_account",
+                f"Signed in as {who}, but the provider doesn't mark that email verified (the ID token's "
+                "email_verified claim isn't true), so Softwarden won't link an account by it. Have the provider "
+                "send email_verified, or approve each person's first sign-in in pending access.",
+            )
         if not mine and not email and shown in own:
             return (
                 False,

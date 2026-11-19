@@ -36,7 +36,7 @@ npm run dev                                  # http://localhost:5173 (proxies /a
 
 `seed_demo` makes the Contoso organization, its accounts, a dependency scenario, a renewal scenario, a discovery scenario an AI agents scenario (three providers, four models and three agents: a complete Copilot Studio HR assistant, one without a human-in-loop decision and one without an owner) and five custom fields (Business case, Annual cost (EUR), SOX scope, Hosting regions and Certificate expiry, a reminder source; none required) with values on the HR assistant, Workday HR, Finance Ledger and Nightly Payroll Export, and two data-quality exceptions (no vendor and no documentation marked not applicable on the first records failing them), with audit history. It is safe to run again (it leaves an organization that already has records, renewals or AI providers alone); `seed_demo --accounts-only` makes only the accounts, people, teams and vendors, which is what the Playwright suite starts from. To rebuild the demo from scratch, stop the API, run `DROP DATABASE softwarden; CREATE DATABASE softwarden;` in `psql`, then `migrate` and `seed_demo`.
 
-`compose.dev.yaml` gives the database the fixed development password `softwarden-dev`, which `settings.py` uses when nothing else is set. It also keeps the dev stack's data in its own volumes (`softwarden-dev-db`, `softwarden-dev-secrets` and the rest), so the plain stack (`docker compose up`, with its generated password) and the dev stack never share a database. You can switch between them without `down -v`. The dev stack starts on its own empty database volume: run `migrate` and `seed_demo` once. A dev database made by an earlier version, which shared the plain stack's volume, stays in the `softwarden-db` volume, untouched.
+`compose.dev.yaml` gives the database the fixed development password `softwarden-dev`, which `settings.py` uses when nothing else is set and `SOFTWARDEN_DEBUG=1` (outside development there is no default password: start-up stops without one). It also keeps the dev stack's data in its own volumes (`softwarden-dev-db`, `softwarden-dev-secrets` and the rest), so the plain stack (`docker compose up`, with its generated password) and the dev stack never share a database. You can switch between them without `down -v`. The dev stack starts on its own empty database volume: run `migrate` and `seed_demo` once. A dev database made by an earlier version, which shared the plain stack's volume, stays in the `softwarden-db` volume, untouched.
 
 Demo accounts (synthetic, local only), all with password `softwarden-demo-2026`:
 
@@ -446,8 +446,10 @@ docker compose exec app python manage.py seed_demo   # idempotent; closes first-
 
 In PowerShell, add the line `SOFTWARDEN_ALLOW_SIMULATED=1` to `.env` with an editor instead of the `printf`.
 
-Without the flag `seed_demo` stops before writing anything and says to set it (`--accounts-only` needs no flag). The
-dev stack (`compose.dev.yaml`) sets it already.
+Without the flag `seed_demo` stops before writing anything and says to set it, `--accounts-only` included (only a
+Playwright `_e2e` database is exempt). The dev stack (`compose.dev.yaml`) sets it already. A rerun never resets the
+password of an account that already exists, and outside development `manage.py doctor` and Admin > System status warn
+while a demo account still has the published demo password. The dev stack (`compose.dev.yaml`) runs with DEBUG off and the development database password, so there `doctor` shows `database_password` FAIL and, after `seed_demo`, `demo_accounts` WARN, and the System page shows the `demo_password` warning: both are expected on that stack. A rerun also leaves existing memberships (role, must-change-password) alone and only adds missing ones.
 
 Sign in at https://localhost as `editor@example.test` (also `admin@example.test` and `viewer@example.test`) with the password `softwarden-demo-2026`.
 

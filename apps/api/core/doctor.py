@@ -151,6 +151,44 @@ def check_mode() -> Check:
     return Check("mode", OK, "Production mode (SOFTWARDEN_DEBUG off).")
 
 
+def check_database_password() -> Check:
+    """Outside development the database password must not be the published development one (settings.py
+    uses it only under DEBUG; an operator could still set it). Says nothing about the password itself."""
+    from softwarden.settings import DEV_DB_PASSWORD
+
+    if settings.DEBUG:
+        return Check("database_password", OK, "Development mode: the development database password is allowed.")
+    if settings.DATABASES["default"].get("PASSWORD") == DEV_DB_PASSWORD:
+        return Check(
+            "database_password",
+            FAIL,
+            "The database password is the published development one (compose.dev.yaml's).",
+            "Change the database role's password (ALTER ROLE ... PASSWORD), then set POSTGRES_PASSWORD to it for app, "
+            "worker and migrations (Compose: remove the development POSTGRES_PASSWORD from .env and never run a server "
+            "with compose.dev.yaml; docs/INSTALL.md).",
+        )
+    return Check("database_password", OK, "Not the development password.")
+
+
+def check_demo_accounts() -> list[Check]:
+    """`@example.test` demo accounts that still have seed_demo's published password, outside DEBUG."""
+    from .demo import accounts_with_demo_password
+
+    found = accounts_with_demo_password()
+    if not found:
+        return [Check("demo_accounts", OK, "No demo account has the published demo password.")]
+    return [
+        Check(
+            "demo_accounts",
+            WARN,
+            f"{len(found)} demo account(s) still have seed_demo's published password: {', '.join(found)}.",
+            "Deactivate or remove them (Admin > Users & roles), or give each a new password: manage.py reset_admin "
+            f"<email> --any-member sets a temporary one to change at next sign-in (Compose: {COMPOSE_APP} reset_admin "
+            "<email> --any-member).",
+        )
+    ]
+
+
 def check_dns_resolver() -> Check:
     """The resolver sign-in domain verification uses (core/dns_txt.py): `simulated` outside development verifies
     nothing real (only *.dns-verified.test), so cloud organizations could never verify their domains."""
@@ -827,7 +865,7 @@ def run(now=None) -> list[Check]:
     """Every check, in order. Without a database (or its tables) only the checks that need none follow."""
     now = now or timezone.now()
     checks = check_database()
-    checks += [check_mode(), check_base_url()]
+    checks += [check_mode(), check_database_password(), check_base_url()]
     if checks[0].status == FAIL or not _tables_exist():
         return checks + check_credential_keys(with_db=False)
     checks += _guarded("setup", check_setup)
@@ -836,6 +874,7 @@ def run(now=None) -> list[Check]:
     checks += _guarded("backup", lambda: check_backup(now))
     checks += _guarded("email", check_email)
     checks += _guarded("dns_resolver", lambda: [check_dns_resolver()])
+    checks += _guarded("demo_accounts", check_demo_accounts)
     if settings.SOFTWARDEN_CLOUD:
         checks += check_cloud()
     checks += _guarded("organizations", _per_organization)

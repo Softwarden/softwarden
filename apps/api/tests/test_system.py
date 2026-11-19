@@ -556,3 +556,23 @@ def test_the_organization_view_warns_only_about_its_own_unreadable_secrets(a, b,
     mine.save()
     monkeypatch.setenv("SOFTWARDEN_CREDENTIAL_KEYS", credentials.generate_key())
     assert codes(b["users"]["admin"]) == ["stored_secrets_unreadable"]
+
+
+def test_demo_accounts_with_the_published_password_are_a_warning_outside_debug(a, b, api, settings):
+    """The installation view names `@example.test` accounts still on seed_demo's published password, outside
+    DEBUG only; an organization's Admin on a shared installation (the organization view) doesn't get it."""
+    from django.contrib.auth import get_user_model
+
+    from core.demo import DEMO_PASSWORD
+
+    get_user_model().objects.create_user("admin@example.test", "admin@example.test", DEMO_PASSWORD)
+    codes = lambda user: [w["code"] for w in api(user).get("system").json_body["warnings"]]  # noqa: E731
+    settings.DEBUG = True
+    assert "demo_password" not in codes(a["users"]["admin"])  # expected in development
+    settings.DEBUG = False
+    body = api(a["users"]["admin"]).get("system").json_body
+    assert body["scope"] == "installation"
+    warning = next(w for w in body["warnings"] if w["code"] == "demo_password")
+    assert "admin@example.test" in warning["message"] and DEMO_PASSWORD not in warning["message"]
+    other = api(b["users"]["admin"]).get("system").json_body
+    assert other["scope"] == "organization" and "demo_password" not in [w["code"] for w in other["warnings"]]

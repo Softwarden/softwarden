@@ -10,14 +10,15 @@ Three issuers at once, each with a discovery document, a key set, a token endpoi
 - `okta`: issuer `https://okta.simulated.invalid/oauth2/default` (an Okta preset with the domain
   `okta.simulated.invalid` and the server `default`, or a generic preset with that discovery URL), RS256, `sub` and
   `email_verified`;
-- `google`: Google's own discovery URL and issuer, answered here only while the simulator is allowed, ES256, `sub`,
-  `hd` (the email's domain) and `email_verified`. Its token and key endpoints are on `*.simulated.invalid`.
+- `google`: issuer `https://accounts.google.simulated.invalid` (a Google preset whose Workspace domains are all under
+  `.test`; core/oidc_discovery.urls), ES256, `sub`, `hd` (the email's domain) and `email_verified`. Never Google's own
+  `accounts.google.com`: with DEBUG turned on by mistake, a real Google preset still goes to Google.
 
 `.invalid` names never resolve (RFC 2606), so nothing here can reach a real host. Keys are made when the process
 starts; authorization codes are kept in memory, so it works within one server process (runserver, the e2e server and
 the test suite). Tests can rotate a key (`rotate`), count key-set fetches (`Idp.key_fetches`) and change what the
 discovery document or a token says (`Idp.doc_overrides`, `issue_code(..., overrides=...)`; the override `_alg`
-HS256 or none signs the token with the client secret or not at all)."""
+HS256 or none signs the token with the client secret or not at all, and the value OMIT leaves a claim out)."""
 
 from __future__ import annotations
 
@@ -44,9 +45,11 @@ from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 from . import simulation
 from .drf import public
 from .graph import Reply
+from .oidc_discovery import SIMULATED_GOOGLE_ISSUER
 
 TENANT_ID = "00000000-0000-4000-8000-00000000c0de"
 OKTA_DOMAIN = "okta.simulated.invalid"
+OMIT = "__omit__"  # an override value that leaves the claim out of the ID token (tests)
 REJECTED_SECRET = "rejected-secret"  # noqa: S105  (a client secret the simulated token endpoints refuse: invalid_client)
 CODE_TTL = 120
 WELL_KNOWN = "/.well-known/openid-configuration"
@@ -129,7 +132,8 @@ class Idp:
         else:
             shaped = {"iss": self.issuer, "sub": subject(self.name, email), "email": email, "email_verified": True}
             shaped |= {"preferred_username": email, "name": email}
-        return {**base, **shaped, **grant.get("overrides", {})}
+        claims = {**base, **shaped, **grant.get("overrides", {})}
+        return {key: value for key, value in claims.items() if value != OMIT}
 
     def sign(self, claims: dict[str, Any]) -> str:
         kid, key = self.keys[-1]
@@ -151,8 +155,8 @@ def _build() -> dict[str, Idp]:
         "okta": Idp("okta", okta, okta + WELL_KNOWN, f"{okta}/v1/token", f"{okta}/v1/keys", "RS256"),
         "google": Idp(
             "google",
-            "https://accounts.google.com",
-            f"https://accounts.google.com{WELL_KNOWN}",
+            SIMULATED_GOOGLE_ISSUER,
+            f"{SIMULATED_GOOGLE_ISSUER}{WELL_KNOWN}",
             "https://oauth2.google.simulated.invalid/token",
             "https://www.google.simulated.invalid/oauth2/v3/certs",
             "ES256",

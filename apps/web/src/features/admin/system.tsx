@@ -238,8 +238,10 @@ export function SystemStatusView({ q, tz, desc, viewer, cloud = false }: { q: St
 }
 
 
-/** Warnings that aren't the backup's (stored secrets a missing credential key can't read), each with its fix:
- *  the operator's in `manage.py doctor`'s words, an organization's Admin's in theirs (they can't set the key). */
+/** Warnings that aren't the backup's, each with its fix: stored secrets a missing credential key can't read, the
+ *  operator's fix in `manage.py doctor`'s words, an organization's Admin's in theirs (they can't set the key); and
+ *  `demo_password` (the installation view only), seed_demo's accounts still on the published password, whose
+ *  message carries its own fix. */
 function WarningsPanel({ warnings, ownView }: { warnings: Warning[]; ownView: boolean }) {
   return (
     <Panel id="h-warnings" icon={<KeyRound className="size-4" aria-hidden="true" />} title="To fix" count={warnings.length} note="Warnings never change the overall status">
@@ -249,7 +251,9 @@ function WarningsPanel({ warnings, ownView }: { warnings: Warning[]; ownView: bo
             <span className="flex flex-wrap items-center gap-2">
               {w.code === "stored_secrets_unreadable"
                 ? <StatusChip tone="overdue" glyph="⊘" label="Secrets unreadable" />
-                : <StatusChip tone="pending" glyph="!" label="Warning" />}
+                : w.code === "demo_password"
+                  ? <StatusChip tone="overdue" glyph="!" label="Demo password" />
+                  : <StatusChip tone="pending" glyph="!" label="Warning" />}
               <span className="font-medium">{w.message}</span>
             </span>
             {w.code === "stored_secrets_unreadable" && (
