@@ -21,7 +21,7 @@ import stat
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from catalog.attachments import zip_directory
+from catalog.attachments import ZIP_OVER_LIMIT, zip_directory
 
 from .fmt import MAX_FILE_BYTES
 
@@ -94,6 +94,8 @@ def read_zip(upload) -> dict[str, bytes]:
     upload.seek(0)
     if found is None:
         raise BundleRejected("The zip is damaged.")
+    if found == ZIP_OVER_LIMIT:
+        raise BundleRejected("ZIP64 archives aren't accepted.")
     entries, directory = found
     if entries > MAX_ENTRIES or directory > MAX_DIRECTORY_BYTES:
         raise BundleRejected(f"The zip lists too many entries (at most {MAX_ENTRIES:,}).")

@@ -29,7 +29,7 @@ left out. Diffs and summaries show the field's label, read when the event is rea
 import datetime
 import json
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, NamedTuple
 
 from django.core.exceptions import ValidationError
@@ -194,11 +194,17 @@ def _decimal(value) -> int | float:
         raise Invalid("Enter a number.")
     try:
         number = Decimal(repr(value)) if isinstance(value, float) else Decimal(str(value).strip())
-    except InvalidOperation:
+        if not number.is_finite():
+            raise Invalid("Enter a number, such as 12.5.")
+        if number and abs(number.adjusted()) > DECIMAL_DIGITS + DECIMAL_PLACES:  # never format 1e9999999 in full
+            raise Invalid(
+                f"Use at most {DECIMAL_PLACES} decimal places."
+                if number.adjusted() < 0
+                else f"Use at most {DECIMAL_DIGITS} digits."
+            )
+        whole, _, places = format(number.normalize(), "f").lstrip("+-").partition(".")
+    except ArithmeticError:  # InvalidOperation, Overflow: "1e9999999" is a value Decimal can hold but not format
         raise Invalid("Enter a number, such as 12.5.") from None
-    if not number.is_finite():
-        raise Invalid("Enter a number, such as 12.5.")
-    whole, _, places = format(number.normalize(), "f").lstrip("+-").partition(".")
     if len(places) > DECIMAL_PLACES:
         raise Invalid(f"Use at most {DECIMAL_PLACES} decimal places.")
     if len(whole.lstrip("0")) + len(places) > DECIMAL_DIGITS:

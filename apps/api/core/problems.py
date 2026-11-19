@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import math
 import traceback
+from decimal import DecimalException
 from http import HTTPStatus
 from typing import Any
 
@@ -150,7 +151,7 @@ UNUSABLE_INPUT_DETAIL = (
 # a string that isn't valid Unicode (UnicodeEncodeError), nesting past the recursion limit (RecursionError) and
 # arithmetic past what a date or number can hold (OverflowError). The parsers and core/input.py refuse these inputs
 # by name first; this is the net for one that gets past them, so it is a 400 rather than a 500.
-UNUSABLE_INPUT = (DataError, UnicodeEncodeError, RecursionError, OverflowError)
+UNUSABLE_INPUT = (DataError, UnicodeEncodeError, RecursionError, OverflowError, DecimalException)
 
 
 def title_of(problem_type: str, status_code: int) -> str:

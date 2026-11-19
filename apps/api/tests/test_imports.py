@@ -11,7 +11,7 @@ from catalog import admin_services, services, state
 from catalog.models import Application, Kind, Person, RecordReview, Resource, Team, Vendor
 from core import worker
 from core.models import AuditEvent, Schedule
-from imports import csvio
+from imports import csvio, importer
 from imports import importer as imports
 from imports.models import ExternalIdentifier, ImportRun, ImportSource
 from tests.conftest import TICK_MOMENTS, no_digest, rel_type
@@ -119,6 +119,17 @@ def test_source_cross_tenant(a, b, api):
     assert admin.get("import-sources").json_body == []
     refused = upload(admin, sheet(Kind.APPLICATION, {"name": "X", "lifecycle": "active"}), source=other)
     assert refused.status_code == 400 and "source" in refused.json_body["errors"]
+
+
+def test_an_editor_upload_with_too_many_columns_is_refused(a, editor):
+    heads = ["name"] + [f"c{i}" for i in range(csvio.MAX_COLUMNS)]  # 301 headings
+    wide = (",".join(heads) + "\nZoom\n").encode()
+    refused = upload(editor, wide)
+    assert refused.status_code == 400 and "300" in str(refused.json_body)
+    cells = b"name\n" + b"x," * csvio.MAX_COLUMNS + b"x\n"
+    assert upload(editor, cells).status_code == 400
+    narrow = (",".join(heads[:-1]) + "\nZoom\n").encode()  # exactly 300
+    assert upload(editor, narrow).status_code == 201
 
 
 # ---- roles and tenancy on runs ----------------------------------------------------------------------------------
@@ -641,6 +652,28 @@ def test_error_report(a, admin):
     # The report goes back in as a file: its report columns are ignored.
     fixed = response.content.replace(b"live", b"active")
     assert upload(admin, fixed).status_code == 201
+
+
+def test_a_near_cap_error_report_uploads_again(a, admin):
+    heads = ["name", *(f"c{i}" for i in range(csvio.MAX_COLUMNS - 1))]  # 300 of the file's own columns
+    report = csvio.write_csv(
+        [*importer.REPORT_COLUMNS, *heads],
+        [{"import_row": "2", "import_outcome": "error", "import_errors": "x", "name": "Zoom"}],
+    )
+    assert len(csvio.read_csv(report)[0]) == csvio.MAX_COLUMNS + 3
+    assert upload(admin, report).status_code == 201
+
+
+def test_an_error_report_whose_stored_file_is_now_refused_is_a_400(a, admin, monkeypatch):
+    run = upload(admin, sheet(Kind.APPLICATION, {"name": "X", "lifecycle": "live"})).json_body
+    ImportRun.objects.filter(id=run["id"]).update(mapping={"name": "name"})
+
+    def refuse(data):
+        raise csvio.CsvRejected("Too wide.")
+
+    monkeypatch.setattr(csvio, "read_csv", refuse)
+    response = admin.client.get(f"/api/v1/imports/{run['id']}/errors.csv")
+    assert response.status_code == 400
 
 
 # ---- Owners, teams, vendors, steward -------------------------------------------------------------------------------

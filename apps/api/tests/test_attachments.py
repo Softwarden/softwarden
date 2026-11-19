@@ -912,6 +912,28 @@ def test_a_zip_with_too_many_entries_is_refused_before_it_is_opened(a, api, monk
     assert attachments.zip_directory(io.BytesIO(b"PK\x03\x04 no end record")) is None
 
 
+def test_a_zip64_locator_is_over_the_limit_and_zipfile_never_runs(a, api, monkeypatch):
+    # The classic end record says 1 entry, the ZIP64 record (which zipfile follows) says 200,000.
+    zip64_end = b"PK\x06\x06" + b"\x00" * 52
+    locator = attachments.ZIP64_LOCATOR + b"\x00" * 16  # 20 bytes
+    classic = attachments.EOCD + b"\x00" * 4 + (1).to_bytes(2, "little") * 2 + b"\x00" * 8 + b"\x00\x00"
+    crafted = b"PK\x03\x04" + b"\x00" * 26 + zip64_end + locator + classic
+    assert attachments.zip_directory(io.BytesIO(crafted)) == attachments.ZIP_OVER_LIMIT
+    assert attachments.zip_directory(io.BytesIO(locator + classic)) == attachments.ZIP_OVER_LIMIT  # near the start
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("zipfile.ZipFile must not be called")
+
+    monkeypatch.setattr(zipfile, "ZipFile", refuse)
+    path = f"applications/{a['app'].id}/attachments"
+    refused = upload(api(a["users"]["editor"]), path, "z64.zip", crafted)
+    assert refused.status_code == 400 and "ZIP64 archives aren't accepted" in refused.json_body["errors"]["file"][0]
+    from catalog_code import bundle
+
+    with pytest.raises(bundle.BundleRejected, match="ZIP64 archives aren't accepted"):
+        bundle.read_zip(io.BytesIO(crafted))
+
+
 @pytest.mark.django_db(transaction=True)
 def test_two_concurrent_uploads_cannot_both_pass_the_quota(settings, monkeypatch, media_root):
     """Each upload fits the quota alone; together they don't. The per-organization advisory lock makes the second

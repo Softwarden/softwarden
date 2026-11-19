@@ -509,6 +509,22 @@ def test_filters_per_type(stocked, api, query, expected):
     assert {r["name"] for r in response.json_body["results"]} == expected
 
 
+@pytest.mark.parametrize("huge", ["1e9999999", "-1e9999999", "1e-9999999", "9" * 400 + "e9999999"])
+def test_a_huge_exponent_is_a_400_on_a_filter_and_on_a_write(stocked, api, huge):
+    # Decimal holds 1e9999999 but can't be formatted or compared; it was a 500.
+    editor = api(stocked["users"]["editor"])
+    listed = editor.get(f"applications?cf_cost={huge}")
+    assert listed.status_code == 400 and "cf_cost" in listed.json_body["errors"]
+    assert editor.get(f"applications?cf_cost__gte={huge}").status_code == 400
+    written = editor.patch(f"applications/{stocked['app'].id}", {"custom_field_data": {"cost": huge}})
+    assert written.status_code == 400 and "custom_field_data.cost" in written.json_body["errors"]
+
+
+def test_a_tiny_or_huge_decimal_gets_the_matching_message():
+    assert "decimal places" in str(pytest.raises(customfields.Invalid, customfields._decimal, "1e-25").value)
+    assert "digits" in str(pytest.raises(customfields.Invalid, customfields._decimal, "1e25").value)
+
+
 @pytest.mark.parametrize(
     "query,param,message",
     [

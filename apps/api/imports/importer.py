@@ -71,7 +71,7 @@ KEEP_DAYS = 30
 REFUSED = "/problems/import-refused"
 PURGED_MESSAGE = "File purged after 30 days"
 # Columns the error report adds in front; an upload of a fixed report ignores them.
-REPORT_COLUMNS = ["import_row", "import_outcome", "import_errors"]
+REPORT_COLUMNS = csvio.REPORT_COLUMNS
 CHOICES: dict[str, Any] = {
     "lifecycle": Lifecycle,
     "criticality": Criticality,
@@ -1446,7 +1446,10 @@ def error_report(run):
     columns = [*REPORT_COLUMNS, *run.headers]
     original = None
     if run.mapping:  # mapped rows hold template columns; the report shows the file's own headings and cells
-        _, file_rows = csvio.read_csv(bytes(run.file_bytes))
+        try:
+            _, file_rows = csvio.read_csv(bytes(run.file_bytes))
+        except csvio.CsvRejected as e:  # the stored file passed on upload; a limit tightened since is a 4xx, not a 500
+            raise FileRejected(str(e)) from None
         original = [{h: v for h, v in r.items() if h in run.headers} for r in file_rows]
     out = []
     for row in run.rows.filter(outcome__in=[RowOutcome.ERROR, RowOutcome.EXCLUDED]).order_by("row_number"):

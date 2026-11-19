@@ -172,12 +172,17 @@ def scan(upload, ext: str, max_bytes: int) -> Scanned:
 ZIP_MAX_ENTRIES = 10_000
 ZIP_MAX_DIRECTORY = 4 * MB
 EOCD = b"PK\x05\x06"
-EOCD_SEARCH = 22 + 65535  # the end record is 22 bytes plus a comment of up to 64 KB
+EOCD_SEARCH = 22 + 65535 + 20  # the end record is 22 bytes plus a comment of up to 64 KB; a ZIP64 locator is 20 more
+ZIP64_LOCATOR = b"PK\x06\x07"
+ZIP_OVER_LIMIT = (2**64, 2**64)
 
 
 def zip_directory(upload) -> tuple[int, int] | None:
-    """(entries, central directory bytes) from the end-of-central-directory record, or None when there is none. A
-    ZIP64 archive's placeholders (0xFFFF entries, 0xFFFFFFFF bytes) read as over any limit."""
+    """(entries, central directory bytes) from the end-of-central-directory record, or None when there is none.
+    A ZIP64 archive reads as over any limit: zipfile follows the ZIP64 locator to a record whose counts replace the
+    classic ones, so the classic record's numbers can't be trusted (a crafted file says 1 entry there and 200,000 in
+    the ZIP64 record). Refusing is the stricter choice and costs nothing: no upload here is anywhere near 4 GB or
+    65,535 entries, the only archives that need ZIP64."""
     upload.seek(0, os.SEEK_END)
     end = upload.tell()
     start = max(0, end - EOCD_SEARCH)
@@ -186,6 +191,8 @@ def zip_directory(upload) -> tuple[int, int] | None:
     at = tail.rfind(EOCD)
     if at < 0 or len(tail) - at < 22:
         return None
+    if at >= 20 and tail[at - 20 : at - 16] == ZIP64_LOCATOR:
+        return ZIP_OVER_LIMIT
     entries = int.from_bytes(tail[at + 10 : at + 12], "little")
     directory = int.from_bytes(tail[at + 12 : at + 16], "little")
     return entries, directory
@@ -202,6 +209,8 @@ def _check_package(upload, ext: str, check: Check, head: bytes) -> None:
         upload.seek(0)
     if found is None:
         _refuse(f"The .{ext} file is damaged or isn't a ZIP archive.")
+    if found == ZIP_OVER_LIMIT:
+        _refuse(f"The .{ext} file is a ZIP64 archive; ZIP64 archives aren't accepted.")
     entries, directory = found
     if entries > ZIP_MAX_ENTRIES or directory > ZIP_MAX_DIRECTORY:
         _refuse(f"The .{ext} archive lists too many files (at most {ZIP_MAX_ENTRIES:,}).")

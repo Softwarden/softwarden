@@ -14,6 +14,10 @@ from catalog.models import Kind
 
 MAX_BYTES = 5 * 1024 * 1024
 MAX_ROWS = 5000
+MAX_COLUMNS = 300  # headings, and cells on any line: a narrow file can't be made into huge row dicts
+# The three columns the import's error report puts in front of the file's own (imports/importer.error_report); a
+# file with MAX_COLUMNS of its own plus these still re-uploads, and the importer ignores them.
+REPORT_COLUMNS = ["import_row", "import_outcome", "import_errors"]
 ESCAPE_START = ("=", "+", "-", "@", "\t", "\r", "'")
 
 COMMON = [
@@ -229,15 +233,22 @@ def read_csv(data):
         raise CsvRejected(
             f"This file isn't UTF-8 (the byte at position {e.start} can't be read). Save it as 'CSV UTF-8' and try again."
         ) from None
+    lines = []
     try:
-        reader = csv.reader(io.StringIO(text, newline=""))
-        lines = [line for line in reader]
+        for line in csv.reader(io.StringIO(text, newline="")):  # streamed: a wide line is refused as it is read
+            while line and not line[-1].strip():  # an Excel "used range" pads lines with empty cells
+                line.pop()
+            if len(line) > MAX_COLUMNS + len(REPORT_COLUMNS):
+                raise CsvRejected(f"A line has more than {MAX_COLUMNS} cells; the limit is {MAX_COLUMNS} columns.")
+            if line:
+                lines.append(line)
     except csv.Error as e:
         raise CsvRejected(f"The file isn't valid CSV: {e}.") from None
-    lines = [line for line in lines if any(cell.strip() for cell in line)]
     if not lines:
         raise CsvRejected("The file is empty.")
     headers = [h.strip() for h in lines[0]]
+    if len([h for h in headers if h.lower() not in REPORT_COLUMNS]) > MAX_COLUMNS:
+        raise CsvRejected(f"The file has more than {MAX_COLUMNS} columns; the limit is {MAX_COLUMNS} columns.")
     if len(set(h.lower() for h in headers if h)) != len([h for h in headers if h]):
         raise CsvRejected("Two columns have the same heading. Rename or remove one.")
     body = lines[1:]
@@ -245,6 +256,7 @@ def read_csv(data):
         raise CsvRejected("The file has headings but no rows.")
     if len(body) > MAX_ROWS:
         raise CsvRejected(f"The file has {len(body):,} rows; the limit is 5,000. Split it into smaller files.")
+    named = [(i, h) for i, h in enumerate(headers) if h]  # row dicts are built from non-blank headings only
     rows = []
     for number, line in enumerate(body, start=2):  # numbered as the import numbers rows (importer.create_run)
         if any(cell.strip() for cell in line[len(headers) :]):  # never dropped without a word
@@ -253,7 +265,7 @@ def read_csv(data):
                 "Add a heading for the extra column or remove the extra cells."
             )
         cells = line + [""] * (len(headers) - len(line))
-        rows.append({h: unescape_cell(cells[i].strip()) for i, h in enumerate(headers) if h})
+        rows.append({h: unescape_cell(cells[i].strip()) for i, h in named})
     return headers, rows
 
 

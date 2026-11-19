@@ -37,6 +37,29 @@ def test_a_row_with_more_cells_than_headings_is_refused():
     assert csvio.read_csv(b"name,lifecycle\nZoom,active,,\n")[1] == [{"name": "Zoom", "lifecycle": "active"}]
 
 
+def test_the_column_cap_is_on_headings_and_on_every_line():
+    cap = csvio.MAX_COLUMNS
+    ok = ",".join(f"c{i}" for i in range(cap)).encode() + b"\n" + b"x," * (cap - 1) + b"x\n"
+    headers, rows = csvio.read_csv(ok)
+    assert len(headers) == cap and len(rows[0]) == cap
+    wide = ",".join(f"c{i}" for i in range(cap + 1)).encode() + b"\nx\n"
+    with pytest.raises(csvio.CsvRejected, match="more than 300 columns"):
+        csvio.read_csv(wide)
+    with pytest.raises(csvio.CsvRejected, match="more than 300 cells"):
+        csvio.read_csv(b"name\n" + b"x," * (cap + len(csvio.REPORT_COLUMNS)) + b"x\n")  # 304 non-empty cells
+    with pytest.raises(csvio.CsvRejected, match="more than 300 columns"):
+        csvio.read_csv(b"import_row," + wide)  # 301 own headings plus a report column: under the line cap, over 300
+    # Trailing empty cells (an Excel used range) don't count: 400 of them after the heading and the row.
+    assert csvio.read_csv(b"name" + b"," * 400 + b"\nZoom" + b"," * 400 + b"\n")[1] == [{"name": "Zoom"}]
+    # The error report's three leading columns on a full-width file still read back.
+    report = (
+        ",".join([*csvio.REPORT_COLUMNS, *(f"c{i}" for i in range(cap))]).encode() + b"\n" + b"x," * (cap + 2) + b"x\n"
+    )
+    assert len(csvio.read_csv(report)[0]) == cap + 3
+    # Blank headings are left out of the row dicts.
+    assert csvio.read_csv(b"name,,,\nZoom,,,\n")[1] == [{"name": "Zoom"}]
+
+
 def test_bom_and_utf8():
     data = csvio.write_csv(["name"], [{"name": "Café"}])
     assert data.startswith(b"\xef\xbb\xbf")
