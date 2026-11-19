@@ -979,6 +979,129 @@ def test_the_installations_own_smtp_host_is_not_restricted(a, settings):
     assert done is not None and done.status == DeliveryStatus.SENT and len(server.script.messages) == 1
 
 
+# ---- An organization's SMTP connection never borrows the installation's credentials --------------------------
+
+INSTALLATION_USER = "installation-relay-user"
+INSTALLATION_PASSWORD = "installation-relay-password-789"  # noqa: S105 (a test value)
+
+
+@pytest.fixture
+def installation_credentials(settings):
+    """The installation's relay signs in (SOFTWARDEN_SMTP_USER / _PASSWORD set): the point of these tests."""
+    settings.EMAIL_HOST_USER, settings.EMAIL_HOST_PASSWORD = INSTALLATION_USER, INSTALLATION_PASSWORD
+
+
+def _installation_relay() -> FakeSmtp:
+    """A server that offers AUTH and would accept the installation's credentials, so a leak would succeed."""
+    return FakeSmtp(Script(username=INSTALLATION_USER, password=INSTALLATION_PASSWORD))
+
+
+def _smtp_settings(a, port: int, **extra) -> None:
+    channel_services.update_email_settings(
+        a["org"],
+        a["users"]["admin"],
+        {
+            "transport": "smtp",
+            "smtp_host": RELAY,
+            "smtp_port": port,
+            "smtp_security": "none",
+            "from_address": "softwarden@contoso.example",
+            **extra,
+        },
+    )
+
+
+def _send(a, key: str):
+    delivery, _ = deliveries.enqueue(
+        a["org"], channel="email", dedupe_key=key, subject="x", content={"text": "x"}, recipient="d@orga.test"
+    )
+    return deliveries.attempt(delivery.id)
+
+
+def test_an_organization_relay_without_credentials_never_gets_the_installations(a, api, installation_credentials):
+    with _installation_relay() as server:
+        _smtp_settings(a, server.port)
+        done = _send(a, "sec1-blank")
+        tested = api(a["users"]["admin"]).post("notification-settings/email/test-connection").json_body
+    assert done is not None and done.status == DeliveryStatus.SENT, done and done.last_error
+    assert tested["ok"] is True
+    assert server.script.auths == []  # no sign-in at all, so the installation's user and password never left
+    assert len(server.script.messages) == 1
+
+
+def test_an_organization_user_name_without_a_password_never_gets_the_installations_password(
+    a, installation_credentials
+):
+    with _installation_relay() as server:
+        _smtp_settings(a, server.port, smtp_username="org-mailer")
+        done = _send(a, "sec1-user")
+        tested = channels.test_email_connection(a["org"])
+    assert done is not None and done.status == DeliveryStatus.SENT, done and done.last_error
+    assert tested.ok is True
+    assert server.script.auths == []  # a user name with no password is no sign-in, not the installation's password
+
+
+def test_an_organization_row_naming_the_installation_host_still_never_borrows_its_credentials(
+    a, api, settings, installation_credentials
+):
+    """Saving refuses the installation's host; a row saved before the operator moved the installation onto that
+    host still connects as the organization (restricted, its own blank credentials), never with the installation's."""
+    with _installation_relay() as server:
+        _smtp_settings(a, server.port)
+        settings.EMAIL_HOST, settings.EMAIL_PORT = RELAY, server.port  # the installation's relay is now that host
+        assert channel_services._installation_host(EmailSettings.objects.get(organization=a["org"]).smtp_host)
+        done = _send(a, "sec1-same-host")
+        tested = api(a["users"]["admin"]).post("notification-settings/email/test-connection").json_body
+    assert done is not None and done.status == DeliveryStatus.SENT, done and done.last_error
+    assert tested["ok"] is True
+    assert server.script.auths == []
+
+
+def test_an_organization_password_is_still_sent_as_its_own(a, installation_credentials):
+    with FakeSmtp(Script(username="org-mailer", password=SMTP_PASSWORD)) as server:
+        _smtp_settings(a, server.port, smtp_username="org-mailer", smtp_password=SMTP_PASSWORD)
+        done = _send(a, "sec1-own")
+    assert done is not None and done.status == DeliveryStatus.SENT, done and done.last_error
+    assert server.script.auths == [("org-mailer", SMTP_PASSWORD)]
+
+
+def test_the_guarded_backend_never_falls_back_to_the_installations_credentials_when_restricted(
+    installation_credentials, settings
+):
+    from notify.smtp import GuardedEmailBackend, SmtpGuard
+
+    settings.EMAIL_SSL_KEYFILE, settings.EMAIL_SSL_CERTFILE = "/installation/client.key", "/installation/client.crt"
+
+    restricted = [
+        GuardedEmailBackend(host=RELAY, guard=SmtpGuard(restrict=True)),
+        GuardedEmailBackend(host=RELAY, username=None, password=None, guard=SmtpGuard(restrict=True)),
+        GuardedEmailBackend(RELAY, 25, None, None, guard=SmtpGuard(restrict=True)),
+        GuardedEmailBackend(host=RELAY, username="org-mailer", guard=SmtpGuard(restrict=True)),
+    ]
+    for backend in restricted:
+        assert backend.password == "" and backend.username in ("", "org-mailer")
+        assert not backend.ssl_keyfile and not backend.ssl_certfile
+    kept = GuardedEmailBackend(host=RELAY, username="org-mailer", password="own", guard=SmtpGuard(restrict=True))
+    assert (kept.username, kept.password) == ("org-mailer", "own")
+    installation = GuardedEmailBackend(guard=SmtpGuard(restrict=False))
+    assert (installation.username, installation.password) == (INSTALLATION_USER, INSTALLATION_PASSWORD)
+    assert installation.ssl_certfile == "/installation/client.crt"
+    default = GuardedEmailBackend()  # no guard: the installation's
+    assert (default.username, default.password) == (INSTALLATION_USER, INSTALLATION_PASSWORD)
+
+
+def test_the_installation_default_still_signs_in_with_its_settings(a, api, settings, installation_credentials):
+    with _installation_relay() as server:
+        settings.SOFTWARDEN_EMAIL_CONFIGURED = True
+        settings.EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+        settings.EMAIL_HOST, settings.EMAIL_PORT, settings.EMAIL_USE_TLS = "127.0.0.1", server.port, False
+        done = _send(a, "sec1-installation")
+        tested = api(a["users"]["admin"]).post("notification-settings/email/test-connection").json_body
+    assert done is not None and done.status == DeliveryStatus.SENT, done and done.last_error
+    assert tested["ok"] is True
+    assert server.script.auths == [(INSTALLATION_USER, INSTALLATION_PASSWORD)] * 2
+
+
 def test_connection_test_errors_never_tell_ports_apart(a):
     """Nothing listening, a server that hangs up at once, a non-SMTP answer: the same words (no port-scan oracle)."""
     import socketserver

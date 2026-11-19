@@ -66,11 +66,32 @@ class _Guarded:
 
 
 class GuardedEmailBackend(EmailBackend):
-    """`get_connection("notify.smtp.GuardedEmailBackend", guard=SmtpGuard(...), ...)`."""
+    """`get_connection("notify.smtp.GuardedEmailBackend", guard=SmtpGuard(...), ...)`.
 
-    def __init__(self, *args: Any, guard: SmtpGuard | None = None, **kwargs: Any):
-        super().__init__(*args, **kwargs)
+    Django's backend reads a `None` user name or password as "use settings.EMAIL_HOST_USER / _PASSWORD". For an
+    organization's own host (`guard.restrict`) that would send the installation's credentials to a server the
+    organization chose, so a missing value is taken as blank (no sign-in) and the settings are never read. The
+    installation's own connection (`restrict=False`) keeps Django's fallback to its settings."""
+
+    def __init__(
+        self,
+        host: str | None = None,
+        port: int | None = None,
+        username: str | None = None,
+        password: str | None = None,
+        *args: Any,
+        guard: SmtpGuard | None = None,
+        **kwargs: Any,
+    ):
         self.guard = guard or SmtpGuard(restrict=False)
+        if self.guard.restrict:
+            username, password = username or "", password or ""
+            # The same fallback exists for the TLS client certificate: never present the installation's to them.
+            kwargs["ssl_keyfile"], kwargs["ssl_certfile"] = (
+                kwargs.get("ssl_keyfile") or "",
+                kwargs.get("ssl_certfile") or "",
+            )
+        super().__init__(host, port, username, password, *args, **kwargs)
 
     @property
     def connection_class(self):

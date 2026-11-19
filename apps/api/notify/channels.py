@@ -310,13 +310,15 @@ def smtp_connection(row: EmailSettings | None, guard: SmtpGuard | None = None):
         if settings.EMAIL_BACKEND == DJANGO_SMTP:
             return get_connection(GUARDED_SMTP, fail_silently=False, guard=guard or SmtpGuard(restrict=False))
         return get_connection(fail_silently=False)  # locmem in tests, console or a custom backend
-    password = credentials.slot_value(row, "smtp_password") if row.smtp_password_ciphertext else None
+    # Blank, never None: Django's backend reads None as "use the installation's EMAIL_HOST_USER / _PASSWORD",
+    # which would send them to the organization's host. No user name or no password means no sign-in.
+    password = credentials.slot_value(row, "smtp_password") if row.smtp_password_ciphertext else ""
     return get_connection(
         GUARDED_SMTP,
         host=row.smtp_host,
         port=row.smtp_port or default_port(row.smtp_security),
-        username=row.smtp_username or None,
-        password=password,
+        username=row.smtp_username or "",
+        password=password or "",
         use_tls=row.smtp_security == SmtpSecurity.STARTTLS,
         use_ssl=row.smtp_security == SmtpSecurity.TLS,
         timeout=SMTP_TIMEOUT,

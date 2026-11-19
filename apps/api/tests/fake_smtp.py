@@ -18,6 +18,7 @@ class Script:
     trickle_greeting: bool = False  # answer "2", then a byte every 0.2 s, never a whole line
     trickle_after_data: bool = False  # the same, as the answer to the message data
     messages: list[dict] = field(default_factory=list)
+    auths: list[tuple[str, str]] = field(default_factory=list)  # every AUTH PLAIN attempt: (user name, password)
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -57,6 +58,8 @@ class _Handler(socketserver.StreamRequestHandler):
             elif verb == "AUTH":
                 parts = line.split(" ")
                 decoded = base64.b64decode(parts[2]).split(b"\x00") if len(parts) > 2 else []
+                if len(decoded) == 3:
+                    script.auths.append((decoded[1].decode(), decoded[2].decode()))
                 if decoded[1:] == [script.username.encode(), script.password.encode()]:
                     self.reply("235 Authentication successful")
                 else:
