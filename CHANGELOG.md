@@ -2,11 +2,11 @@
 
 Every release of Softwarden, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/).
 
-Each release has a section headed `## [X.Y.Z] - YYYY-MM-DD`. Pushing the tag `vX.Y.Z` publishes the images and creates the GitHub Release with that section as its notes (`.github/workflows/release.yml`); a tag without a section publishes nothing. A pre-release tag (`v1.1.0-rc.1`) needs its own section too, headed `## [1.1.0-rc.1] - YYYY-MM-DD`. A release is prepared in one of two ways, and the release workflow refuses to publish a heading without a `YYYY-MM-DD` date. Usually, before tagging, rename `[Unreleased]` to the version and date and start a new empty `[Unreleased]` above it. A release already written under its own heading keeps the placeholder `unreleased (set on tag day)` instead of the date until then (1.0.0 does); replace the placeholder with the tag day. Either way, and set the same version everywhere a version lives ([Cutting a release](docs/DEVELOPMENT.md#cutting-a-release); `apps/api/tests/test_upgrade_ci.py` checks they agree).
+Each release has a section headed `## [X.Y.Z] - YYYY-MM-DD`. Pushing the tag `vX.Y.Z` publishes the images and creates the GitHub Release with that section as its notes (`.github/workflows/release.yml`); a tag without a section publishes nothing. A pre-release tag (`v1.1.0-rc.1`) needs its own section too, headed `## [1.1.0-rc.1] - YYYY-MM-DD`. A release is prepared in one of two ways, and the release workflow refuses to publish a heading without a `YYYY-MM-DD` date. Usually, before tagging, rename `[Unreleased]` to the version and date and start a new empty `[Unreleased]` above it. A release already written under its own heading keeps the placeholder `unreleased (set on tag day)` instead of the date until then; replace the placeholder with the tag day. Either way, and set the same version everywhere a version lives ([Cutting a release](docs/DEVELOPMENT.md#cutting-a-release); `apps/api/tests/test_upgrade_ci.py` checks they agree).
 
 ## [Unreleased]
 
-## [1.0.0] - unreleased (set on tag day)
+## [1.0.0] - 2026-11-19
 
 The first release of Softwarden: an open-source system of record for the software, SaaS, integrations and AI agents an IT team runs. Install it on one Linux VM with Docker Compose (`docs/INSTALL.md`, then `docs/FIRST_RUN.md` for discovery), or on Kubernetes with the Helm chart. Everything listed here is open source and included for every organization (`docs/CAPABILITIES.md`).
 

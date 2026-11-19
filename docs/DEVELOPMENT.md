@@ -370,7 +370,7 @@ The first-run setup spec (`e2e/setup.spec.ts`) needs an installation with no acc
 A maintainer's steps; nothing is published until the tag is pushed. X.Y.Z below is the version.
 
 1. **Prepare the release commit** on `main`:
-   - in `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - <date>` and add a new empty `## [Unreleased]` above it. A release already written under its own heading (1.0.0 is) keeps the placeholder `unreleased (set on tag day)` until then: replace it with the tag day;
+   - in `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - <date>` and add a new empty `## [Unreleased]` above it. A release already written under its own heading keeps the placeholder `unreleased (set on tag day)` until then: replace it with the tag day;
    - set `version` to X.Y.Z in `apps/api/pyproject.toml` (`/healthz/ops` and the OpenAPI schema read it from there), `mcp/pyproject.toml` and `apps/web/package.json`, `__version__` in `mcp/softwarden_mcp/__init__.py`, and `appVersion` in `deploy/helm/softwarden/Chart.yaml` (bump the chart's own `version` too when the chart changed);
    - refresh the lock files' own entries: `(cd apps/api && uv lock)`, `(cd mcp && uv lock)`, `(cd apps/web && npm install --package-lock-only)`;
    - run the gate (`apps/api/tests/test_upgrade_ci.py` fails when any of these versions differ from each other or from the newest CHANGELOG release, compared as PEP 440 versions so `1.1.0rc1` in uv.lock matches `1.1.0-rc.1`; INSTALL.md must pin the newest stable release, so leave it alone for a pre-release), commit and push.
