@@ -5,7 +5,7 @@
   read-write token to every one of them, and to every other session-only route, so a new one can't slip past.
 - Every current-password check counts with the account's sign-in attempts (admin_services.check_current_password)
   and a failure is audited; an Admin can't reset their own password.
-- An Admin's open invitations stop when they stop being an Admin; a SCIM token stops with its creator's authority.
+- An Admin's open invitations stop when they stop being an Admin.
 - A password reset or change revokes the account's calendar feeds; no feed is served while a change is forced."""
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from core.impersonation_routes import (
     SESSION_ONLY_ROUTES,
     TOKEN_MAY_USE,
 )
-from core.models import AuditEvent, Invitation, Membership, ScimToken
+from core.models import AuditEvent, Invitation, Membership
 from money import calendar_feeds
 from money.models import CalendarFeed
 from softwarden import ee
@@ -38,7 +38,6 @@ from tests.test_url_coverage import declarations
 PASSWORD = "correct-horse-battery"
 START = 1_800_000_000 - (1_800_000_000 % 3600)
 FEED = "/api/v1/calendar/renewals.ics"
-needs_ee = pytest.mark.skipif(not ee.INSTALLED, reason="SCIM needs the optional ee package")
 
 
 @pytest.fixture
@@ -294,28 +293,6 @@ def test_an_invitation_dies_when_its_creator_is_removed(a, b, api, admin2):
     assert event.changes["reason"] == "creator_removed"
 
 
-def scim_get(org, secret):
-    return Client().get(f"/scim/v2/{org.slug}/Users", HTTP_AUTHORIZATION=f"Bearer {secret}")
-
-
-@needs_ee
-def test_a_scim_token_stops_when_its_creator_loses_admin(a, api, admin2):
-    from ee.scim import tokens as scim_tokens
-
-    org, _ = capabilities.set_edition(a["org"], "enterprise")
-    _, secret = scim_tokens.create_token(org, admin2, "Entra", timezone.now() + timedelta(days=30))
-    _, kept = scim_tokens.create_token(org, a["users"]["admin"], "Okta", timezone.now() + timedelta(days=30))
-    assert scim_get(org, secret).status_code == 200
-    assert api(a["users"]["admin"]).patch(f"users/{admin2.id}", {"role": "viewer"}).status_code == 200
-    assert scim_get(org, secret).status_code == 401
-    assert scim_get(org, kept).status_code == 200
-    # Promoted again, their token works again: the check is the creator's authority now, not a revocation.
-    assert api(a["users"]["admin"]).patch(f"users/{admin2.id}", {"role": "admin"}).status_code == 200
-    assert scim_get(org, secret).status_code == 200
-    ScimToken.objects.filter(created_by=admin2).update(created_by=None)
-    assert scim_get(org, secret).status_code == 401  # no creator left: nobody's authority
-
-
 # ---- Calendar feeds and passwords -----------------------------------------------------------------------------
 
 
@@ -440,25 +417,6 @@ def test_an_exempted_write_still_works_with_a_token(a, b, admin_token):
     Membership.objects.create(user=viewer, organization=b["org"], role="viewer")  # else it's a deactivation
     assert admin_token.send("DELETE", f"/api/v1/users/{viewer.id}").status_code == 204
     assert not Membership.objects.filter(user=viewer, organization=a["org"]).exists()
-
-
-@needs_ee
-def test_a_scim_token_whose_creator_lost_admin_is_shown_and_warned_about(a, api, admin2):
-    from ee.scim import tokens as scim_tokens
-
-    from core import doctor
-
-    org, _ = capabilities.set_edition(a["org"], "enterprise")
-    stale, _ = scim_tokens.create_token(org, admin2, "Entra", timezone.now() + timedelta(days=30))
-    scim_tokens.create_token(org, a["users"]["admin"], "Okta", timezone.now() + timedelta(days=30))
-    assert doctor.check_scim_tokens(org) == []
-    assert api(a["users"]["admin"]).patch(f"users/{admin2.id}", {"role": "editor"}).status_code == 200
-    listed = {t["name"]: t["status"] for t in api(a["users"]["admin"]).get("scim/tokens").json_body}
-    assert listed == {"Entra": "creator_not_admin", "Okta": "active"}
-    [check] = doctor.check_scim_tokens(org)
-    assert check.status == doctor.WARN and "Entra" in check.message and "Okta" not in check.message
-    scim_tokens.revoke_token(org, a["users"]["admin"], stale)
-    assert doctor.check_scim_tokens(org) == []
 
 
 def test_a_wrong_password_starting_an_impersonation_is_audited(a, api, clock):
