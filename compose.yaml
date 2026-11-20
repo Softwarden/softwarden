@@ -306,7 +306,7 @@ services:
   # TLS and security headers in front of the app (docker/Caddyfile). CADDY_TLS=internal (default) uses Caddy's own
   # local CA; for a real certificate set CADDY_TLS="/certs/cert.pem /certs/key.pem" with the files in TLS_CERT_DIR.
   proxy:
-    image: caddy:2.11.9@sha256:0c2243efcf437ab7f7a978f1027fcf0d4f9be8a75df27b1b3fbc5dbe0ffa8cf0  # pinned, like db; CI runs `caddy validate` on docker/Caddyfile with this tag
+    image: caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b  # pinned, like db; CI runs `caddy validate` on docker/Caddyfile with this tag
     <<: *hardened
     cap_add: [NET_BIND_SERVICE]  # Caddy runs as root in its image; this is all it needs to bind 80 and 443
     tmpfs: ["/tmp:size=16m"]
