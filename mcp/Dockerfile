@@ -4,7 +4,7 @@
 #   docker build --build-context cacerts=../ca-certs -t softwarden-mcp:local mcp
 # uv installs the dependencies below; it is bind-mounted into those steps, never copied into the image, so a
 # code-execution bug in the server finds no package installer.
-FROM ghcr.io/astral-sh/uv:0.9.18@sha256:5713fa8217f92b80223bc83aac7db36ec80a84437dbc0d04bbc659cae030d8c9 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
 FROM python:3.13.18-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72
 ENV PYTHONDONTWRITEBYTECODE=1 \

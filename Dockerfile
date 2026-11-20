@@ -1,7 +1,7 @@
 # Softwarden web/API image: the built SPA and the Django API in one container, one origin.
 # The same image runs the worker and, as root, the one-shot `init` service that generates secrets (compose.yaml).
 
-FROM node:22.22-bookworm-slim@sha256:e21fc383b50d5347dc7a9f1cae45b8f4e2f0d39f7ade28e4eef7d2934522b752 AS web
+FROM node:22.23-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS web
 WORKDIR /src
 # Roots of TLS-inspecting networks (ca-certs/README.md), trusted by npm when any are present.
 COPY ca-certs/ /tmp/ca-certs/
@@ -22,7 +22,7 @@ RUN node scripts/third-party-notices.mjs . > /src/third-party-npm.txt
 
 # uv installs the Python dependencies below; it is bind-mounted into that one step, never copied into the image, so a
 # code-execution bug in the app finds no package installer.
-FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
 # An exact patch release (upgrade runbook, "Pinned images"): rebuilding the same commit gives the same Python.
 FROM python:3.13.18-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72
