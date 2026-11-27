@@ -22,7 +22,7 @@ RUN node scripts/third-party-notices.mjs . > /src/third-party-npm.txt
 
 # uv installs the Python dependencies below; it is bind-mounted into that one step, never copied into the image, so a
 # code-execution bug in the app finds no package installer.
-FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.10@sha256:a3ea1357342c1a4bf9a0c53a3deb1b55379aefa037338d8113d5771efa01774f AS uv
 
 # An exact patch release (upgrade runbook, "Pinned images"): rebuilding the same commit gives the same Python.
 FROM python:3.13.18-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72
